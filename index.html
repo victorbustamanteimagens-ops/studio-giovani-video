@@ -52,7 +52,7 @@
   .toggle-row{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2);}
   .toggle-row input[type="checkbox"]{width:18px; height:18px; accent-color:var(--accent); flex-shrink:0;}
   .toggle-row .toggle-field{flex:1; display:flex; flex-direction:column; gap:4px}
-  .toggle-row .toggle-label{font-size:13px; font-weight:600}
+  .toggle-row .toggle-label{font-size:13px; font-weight:600;}
   .toggle-row input[type="text"]{font:inherit; font-size:16px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
   .toggle-row.off{opacity:0.55}
   .toggle-row.off input[type="text"]{opacity:0.6}
@@ -137,6 +137,12 @@
         <button type="button" class="tab" data-format="1:1" aria-pressed="false">Feed (1:1)</button>
       </div>
 
+      <legend style="margin-top:6px">Estilo da arte</legend>
+      <div class="tabs" id="styleSeg" role="group" aria-label="Estilo da arte">
+        <button type="button" class="tab" data-style="classic" aria-pressed="true">Clássico</button>
+        <button type="button" class="tab" data-style="editorial" aria-pressed="false">Editorial</button>
+      </div>
+
       <legend style="margin-top:6px">Foto do imóvel</legend>
       <label class="upload" for="fotoInput" id="fotoUploadLabel">
         <strong>Toque para escolher a foto</strong>
@@ -160,6 +166,13 @@
         <div class="toggle-field">
           <span class="toggle-label">Bairro, cidade</span>
           <input type="text" id="localizacao" value="Icaraí, Niterói">
+        </div>
+      </div>
+      <div class="toggle-row" data-toggle-row="tipo">
+        <input type="checkbox" id="tg_tipo" checked>
+        <div class="toggle-field">
+          <span class="toggle-label">Tipo do imóvel (usado no estilo Editorial)</span>
+          <input type="text" id="tipo" value="Apartamento">
         </div>
       </div>
     </fieldset>

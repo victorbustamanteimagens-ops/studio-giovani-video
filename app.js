@@ -65,6 +65,7 @@ function readState(){
   return {
     variant: document.querySelector('#variantSeg button[aria-pressed="true"]').getAttribute('data-variant'),
     localizacao: { on: el('tg_localizacao').checked, value: el('localizacao').value.trim() },
+    tipo:        { on: el('tg_tipo').checked, value: el('tipo').value.trim() },
     status:      { on: el('tg_status').checked, value: el('status').value.trim() },
     valor:       { on: el('tg_valor').checked, value: el('valor').value.trim() },
     area:        { on: el('tg_area').checked, value: el('area').value.trim() },
@@ -101,6 +102,14 @@ function roundRectPath(ctx, x, y, w, h, r){
 }
 
 function trySetLetterSpacing(ctx, px){ try { ctx.letterSpacing = px + 'px'; } catch(e){} }
+
+// separa "Bairro, Cidade" em { bairro, cidade } — usado pelo estilo Editorial
+// pra montar título (bairro) + subtítulo (cidade · tipo)
+function splitLocalizacaoValue(value){
+  var idx = value.indexOf(',');
+  if (idx === -1) return { bairro: value.trim(), cidade: '' };
+  return { bairro: value.slice(0, idx).trim(), cidade: value.slice(idx + 1).trim() };
+}
 
 function drawGlowIcon(ctx, path, x, y, size, opts){
   opts = opts || {};
@@ -161,6 +170,78 @@ function drawSolidBox(ctx, x, y, text, opts){
   ctx.fillText(text, x + padX, y + boxH/2 + fontSize*0.34);
   if (opts.letterSpacing) trySetLetterSpacing(ctx, 0);
   return boxH;
+}
+
+// pill contornada (sem preenchimento sólido) — usada no destaque do estilo Editorial
+function drawOutlineBox(ctx, x, y, text, opts){
+  opts = opts || {};
+  var fontSize = opts.fontSize || 20;
+  var weight = opts.weight || '700';
+  var family = opts.family || 'Work Sans';
+  var padX = opts.padX != null ? opts.padX : 18;
+  var padY = opts.padY != null ? opts.padY : 10;
+  var maxW = opts.maxW || 900;
+  ctx.font = weight + ' ' + fontSize + 'px "' + family + '"';
+  if (opts.letterSpacing) trySetLetterSpacing(ctx, opts.letterSpacing);
+  var textW = Math.min(ctx.measureText(text).width, maxW);
+  var boxW = textW + padX*2;
+  var boxH = fontSize + padY*2;
+  var radius = opts.radius != null ? opts.radius : boxH/2;
+  var lw = opts.borderWidth || 1.5;
+  ctx.save();
+  ctx.fillStyle = opts.fill || 'rgba(9,16,26,0.3)';
+  roundRectPath(ctx, x, y, boxW, boxH, radius);
+  ctx.fill();
+  ctx.lineWidth = lw;
+  ctx.strokeStyle = opts.borderColor || GOLD;
+  roundRectPath(ctx, x + lw/2, y + lw/2, boxW - lw, boxH - lw, Math.max(0, radius - lw/2));
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = opts.textColor || GOLD_LIGHT;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(text, x + padX, y + boxH/2 + fontSize*0.34);
+  if (opts.letterSpacing) trySetLetterSpacing(ctx, 0);
+  return boxH;
+}
+
+// pill escura com ícone + texto juntos (usada na fileira quartos/vagas/área do
+// estilo Editorial) — devolve a largura usada, pra empilhar pills lado a lado
+function drawIconPill(ctx, x, y, icon, label, opts){
+  opts = opts || {};
+  var fontSize = opts.fontSize || 22;
+  var iconSize = opts.iconSize || 22;
+  var padX = opts.padX != null ? opts.padX : 16;
+  var padY = opts.padY != null ? opts.padY : 11;
+  var gap = opts.gap != null ? opts.gap : 10;
+  ctx.font = '700 ' + fontSize + 'px "Work Sans"';
+  var textW = ctx.measureText(label).width;
+  var boxH = Math.max(iconSize, fontSize) + padY*2;
+  var boxW = padX + iconSize + gap + textW + padX;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.28)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = opts.bg || BLUE_ROW;
+  roundRectPath(ctx, x, y, boxW, boxH, opts.radius != null ? opts.radius : 8);
+  ctx.fill();
+  ctx.restore();
+
+  var iconX = x + padX;
+  var iconY = y + boxH/2 - iconSize/2;
+  if (icon === 'bed'){
+    drawGlowIcon(ctx, BED_PATH, iconX, iconY, iconSize, {});
+  } else if (icon === 'car'){
+    drawGlowIcon(ctx, CAR_PATH, iconX, iconY, iconSize, {});
+  } else if (icon === 'area'){
+    drawGlowIcon(ctx, AREA_PATH, iconX, iconY, iconSize, {});
+  }
+  ctx.fillStyle = CREAM;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(label, iconX + iconSize + gap, y + boxH/2 + fontSize*0.34);
+  return boxW;
 }
 
 // --- layout 9:16 (Reels/Stories) — o mesmo padrão usado no vídeo ---
@@ -352,9 +433,287 @@ function renderOverlaySquare(ctx, W, H, st, variantColors){
   ctx.restore();
 }
 
+// --- estilo Editorial — 1:1 (feed) ---
+// bloco único perto do rodapé: marca, título (bairro) + subtítulo (cidade ·
+// tipo), destaque em pill contornada, fileira de pills quartos/vagas/área,
+// divisor, e preço + rodapé (nome/CRECI) na mesma linha.
+function renderEditorialSquare(ctx, W, H, st, variantColors){
+  var pad = 46, rightPad = 46;
+
+  var badgeSize = 78;
+  var badgeX = pad, badgeY = 42;
+  if (remaxIconReady){
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 3;
+    var iconH = badgeSize;
+    var iconW = iconH * (remaxIcon.width / remaxIcon.height);
+    ctx.drawImage(remaxIcon, badgeX, badgeY, iconW, iconH);
+    ctx.restore();
+  }
+
+  var scrimTop = Math.round(H * 0.42);
+  var grad = ctx.createLinearGradient(0, scrimTop, 0, H);
+  grad.addColorStop(0, 'rgba(9,16,26,0)');
+  grad.addColorStop(0.45, 'rgba(9,16,26,0.55)');
+  grad.addColorStop(1, 'rgba(9,16,26,0.92)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, scrimTop, W, H - scrimTop);
+
+  var cx = pad;
+  var cursor = Math.round(H * 0.472);
+
+  cursor += drawSolidBox(ctx, cx, cursor, 'RE/MAX AXXIA IMÓVEIS', {
+    fontSize: 19, weight: '800', family: 'Work Sans',
+    bg: variantColors.bg, textColor: variantColors.text,
+    letterSpacing: 1, padX: 16, padY: 9, radius: 5, maxW: W - cx - rightPad
+  });
+  cursor += 18;
+
+  var loc = splitLocalizacaoValue(st.localizacao.on ? st.localizacao.value : '');
+  var titleText = loc.bairro || 'Imóvel';
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = CREAM;
+  ctx.font = '700 60px "Fraunces"';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  var titleBaseline = cursor + 52;
+  ctx.fillText(titleText, cx, titleBaseline);
+  ctx.restore();
+  cursor = titleBaseline + 6;
+
+  var subtitleParts = [];
+  if (loc.cidade) subtitleParts.push(loc.cidade);
+  if (st.tipo.on && st.tipo.value) subtitleParts.push(st.tipo.value);
+  var subtitleText = subtitleParts.join(' · ');
+  if (subtitleText){
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = 'rgba(244,240,230,0.78)';
+    ctx.font = '500 24px "Work Sans"';
+    var subBaseline = cursor + 24;
+    ctx.fillText(subtitleText, cx, subBaseline);
+    ctx.restore();
+    cursor = subBaseline + 20;
+  } else {
+    cursor += 8;
+  }
+
+  if (st.destaque.on && st.destaque.value){
+    cursor += drawOutlineBox(ctx, cx, cursor, '+ ' + st.destaque.value.toUpperCase(), {
+      fontSize: 18, weight: '700', family: 'Work Sans', letterSpacing: 0.6,
+      borderColor: GOLD, textColor: GOLD_LIGHT, fill: 'rgba(9,16,26,0.3)',
+      padX: 16, padY: 9, radius: 22, maxW: W - cx - rightPad
+    });
+    cursor += 22;
+  }
+
+  var items = [];
+  if (st.quartos.on && st.quartos.value) items.push({ icon: 'bed', label: st.quartos.value });
+  if (st.vagas.on && st.vagas.value) items.push({ icon: 'car', label: st.vagas.value });
+  if (st.area.on && st.area.value) items.push({ icon: 'area', label: st.area.value });
+  if (items.length){
+    var rowX = cx, rowY = cursor, rowH = 0, gapPill = 12;
+    var pillOpts = { fontSize: 22, iconSize: 22, padX: 16, padY: 11, gap: 10, radius: 8 };
+    for (var i = 0; i < items.length; i++){
+      ctx.font = '700 ' + pillOpts.fontSize + 'px "Work Sans"';
+      var textW = ctx.measureText(items[i].label).width;
+      var boxW = pillOpts.padX + pillOpts.iconSize + pillOpts.gap + textW + pillOpts.padX;
+      if (rowX + boxW > W - rightPad && rowX > cx){
+        rowX = cx;
+        rowY += rowH + 10;
+        rowH = 0;
+      }
+      var usedW = drawIconPill(ctx, rowX, rowY, items[i].icon, items[i].label, pillOpts);
+      var boxH = Math.max(pillOpts.iconSize, pillOpts.fontSize) + pillOpts.padY * 2;
+      rowH = Math.max(rowH, boxH);
+      rowX += usedW + gapPill;
+    }
+    cursor = rowY + rowH + 32;
+  } else {
+    cursor += 6;
+  }
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(244,240,230,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, cursor);
+  ctx.lineTo(W - rightPad, cursor);
+  ctx.stroke();
+  ctx.restore();
+  cursor += 24;
+
+  var priceH = 0;
+  if (st.valor.on && st.valor.value){
+    priceH = drawSolidBox(ctx, cx, cursor, st.valor.value, {
+      fontSize: 30, weight: '700', family: 'Fraunces',
+      bg: variantColors.bg, textColor: variantColors.text,
+      padX: 22, padY: 14, radius: 6, maxW: 460
+    });
+  }
+  var footerCenterY = priceH ? cursor + priceH / 2 : cursor + 14;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 1;
+  ctx.textAlign = 'right';
+  ctx.fillStyle = CREAM;
+  ctx.font = '600 22px "Fraunces"';
+  ctx.fillText('Giovani Oliveira', W - rightPad, footerCenterY - 6);
+  ctx.font = '400 15px "Work Sans"';
+  ctx.fillStyle = 'rgba(244,240,230,0.8)';
+  ctx.fillText('CRECI 110.031 · 23 anos de mercado', W - rightPad, footerCenterY + 16);
+  ctx.restore();
+}
+
+// --- estilo Editorial — 9:16 (Reels/Stories) — mesma composição, reescalada ---
+function renderEditorialTall(ctx, W, H, st, variantColors){
+  var pad = 56, rightPad = 56;
+
+  var badgeSize = 100;
+  var badgeX = pad, badgeY = 58;
+  if (remaxIconReady){
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 16;
+    ctx.shadowOffsetY = 3;
+    var iconH = badgeSize;
+    var iconW = iconH * (remaxIcon.width / remaxIcon.height);
+    ctx.drawImage(remaxIcon, badgeX, badgeY, iconW, iconH);
+    ctx.restore();
+  }
+
+  var scrimTop = Math.round(H * 0.56);
+  var grad = ctx.createLinearGradient(0, scrimTop, 0, H);
+  grad.addColorStop(0, 'rgba(9,16,26,0)');
+  grad.addColorStop(0.45, 'rgba(9,16,26,0.55)');
+  grad.addColorStop(1, 'rgba(9,16,26,0.93)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, scrimTop, W, H - scrimTop);
+
+  var cx = pad;
+  var cursor = Math.round(H * 0.615);
+
+  cursor += drawSolidBox(ctx, cx, cursor, 'RE/MAX AXXIA IMÓVEIS', {
+    fontSize: 25, weight: '800', family: 'Work Sans',
+    bg: variantColors.bg, textColor: variantColors.text,
+    letterSpacing: 1.3, padX: 20, padY: 12, radius: 6, maxW: W - cx - rightPad
+  });
+  cursor += 24;
+
+  var loc = splitLocalizacaoValue(st.localizacao.on ? st.localizacao.value : '');
+  var titleText = loc.bairro || 'Imóvel';
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 14;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = CREAM;
+  ctx.font = '700 82px "Fraunces"';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  var titleBaseline = cursor + 70;
+  ctx.fillText(titleText, cx, titleBaseline);
+  ctx.restore();
+  cursor = titleBaseline + 10;
+
+  var subtitleParts = [];
+  if (loc.cidade) subtitleParts.push(loc.cidade);
+  if (st.tipo.on && st.tipo.value) subtitleParts.push(st.tipo.value);
+  var subtitleText = subtitleParts.join(' · ');
+  if (subtitleText){
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = 'rgba(244,240,230,0.78)';
+    ctx.font = '500 32px "Work Sans"';
+    var subBaseline = cursor + 30;
+    ctx.fillText(subtitleText, cx, subBaseline);
+    ctx.restore();
+    cursor = subBaseline + 26;
+  } else {
+    cursor += 10;
+  }
+
+  if (st.destaque.on && st.destaque.value){
+    cursor += drawOutlineBox(ctx, cx, cursor, '+ ' + st.destaque.value.toUpperCase(), {
+      fontSize: 23, weight: '700', family: 'Work Sans', letterSpacing: 0.8,
+      borderColor: GOLD, textColor: GOLD_LIGHT, fill: 'rgba(9,16,26,0.3)',
+      padX: 20, padY: 12, radius: 26, maxW: W - cx - rightPad
+    });
+    cursor += 28;
+  }
+
+  var items = [];
+  if (st.quartos.on && st.quartos.value) items.push({ icon: 'bed', label: st.quartos.value });
+  if (st.vagas.on && st.vagas.value) items.push({ icon: 'car', label: st.vagas.value });
+  if (st.area.on && st.area.value) items.push({ icon: 'area', label: st.area.value });
+  if (items.length){
+    var rowX = cx, rowY = cursor, rowH = 0, gapPill = 16;
+    var pillOpts = { fontSize: 28, iconSize: 28, padX: 20, padY: 14, gap: 12, radius: 10 };
+    for (var i = 0; i < items.length; i++){
+      ctx.font = '700 ' + pillOpts.fontSize + 'px "Work Sans"';
+      var textW = ctx.measureText(items[i].label).width;
+      var boxW = pillOpts.padX + pillOpts.iconSize + pillOpts.gap + textW + pillOpts.padX;
+      if (rowX + boxW > W - rightPad && rowX > cx){
+        rowX = cx;
+        rowY += rowH + 14;
+        rowH = 0;
+      }
+      var usedW = drawIconPill(ctx, rowX, rowY, items[i].icon, items[i].label, pillOpts);
+      var boxH = Math.max(pillOpts.iconSize, pillOpts.fontSize) + pillOpts.padY * 2;
+      rowH = Math.max(rowH, boxH);
+      rowX += usedW + gapPill;
+    }
+    cursor = rowY + rowH + 44;
+  } else {
+    cursor += 10;
+  }
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(244,240,230,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, cursor);
+  ctx.lineTo(W - rightPad, cursor);
+  ctx.stroke();
+  ctx.restore();
+  cursor += 32;
+
+  var priceH = 0;
+  if (st.valor.on && st.valor.value){
+    priceH = drawSolidBox(ctx, cx, cursor, st.valor.value, {
+      fontSize: 40, weight: '700', family: 'Fraunces',
+      bg: variantColors.bg, textColor: variantColors.text,
+      padX: 28, padY: 18, radius: 8, maxW: 560
+    });
+  }
+  var footerCenterY = priceH ? cursor + priceH / 2 : cursor + 18;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 1;
+  ctx.textAlign = 'right';
+  ctx.fillStyle = CREAM;
+  ctx.font = '600 28px "Fraunces"';
+  ctx.fillText('Giovani Oliveira', W - rightPad, footerCenterY - 8);
+  ctx.font = '400 19px "Work Sans"';
+  ctx.fillStyle = 'rgba(244,240,230,0.8)';
+  ctx.fillText('CRECI 110.031 · 23 anos de mercado', W - rightPad, footerCenterY + 20);
+  ctx.restore();
+}
+
 // ============================ estado geral ============================
 var mode = 'video';       // 'video' | 'foto'
 var fotoFormat = '9:16';  // '9:16' | '1:1'
+var artStyle = 'classic'; // 'classic' | 'editorial' — só usado no modo foto
 
 function currentW(){ return 1080; }
 function currentH(){
@@ -367,14 +726,17 @@ function render(){
   var variantColors = variantColorsFor(st);
   var W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
-  if (mode === 'foto' && fotoFormat === '1:1'){
+  if (mode === 'foto' && artStyle === 'editorial'){
+    if (fotoFormat === '1:1') renderEditorialSquare(ctx, W, H, st, variantColors);
+    else renderEditorialTall(ctx, W, H, st, variantColors);
+  } else if (mode === 'foto' && fotoFormat === '1:1'){
     renderOverlaySquare(ctx, W, H, st, variantColors);
   } else {
     renderOverlayTall(ctx, W, H, st, variantColors);
   }
 }
 
-['localizacao','status','valor','area','quartos','vagas','destaque'].forEach(function(key){
+['localizacao','tipo','status','valor','area','quartos','vagas','destaque'].forEach(function(key){
   el(key).addEventListener('input', render);
   el('tg_' + key).addEventListener('change', function(){
     document.querySelector('[data-toggle-row="' + key + '"]').classList.toggle('off', !this.checked);
@@ -386,6 +748,15 @@ document.querySelectorAll('#variantSeg button').forEach(function(btn){
   btn.addEventListener('click', function(){
     document.querySelectorAll('#variantSeg button').forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
     btn.setAttribute('aria-pressed', 'true');
+    render();
+  });
+});
+
+document.querySelectorAll('#styleSeg button').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('#styleSeg button').forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
+    btn.setAttribute('aria-pressed', 'true');
+    artStyle = btn.getAttribute('data-style');
     render();
   });
 });
@@ -637,7 +1008,7 @@ function applyMode(){
 function boot(){
   applyMode();
   render();
-  var families = ['700 30px "Work Sans"', '800 54px "Fraunces"', '700 40px "Fraunces"', '600 34px "Fraunces"'];
+  var families = ['700 30px "Work Sans"', '500 30px "Work Sans"', '800 54px "Fraunces"', '700 40px "Fraunces"', '600 34px "Fraunces"'];
   Promise.all(families.map(function(f){
     try { return document.fonts.load(f); } catch(e){ return Promise.resolve(); }
   })).then(render).catch(function(){});
@@ -752,7 +1123,10 @@ function compositePhotoBlob(){
     drawPhotoOnCtx(octx, W, H);
     var st = readState();
     var variantColors = variantColorsFor(st);
-    if (fotoFormat === '1:1'){
+    if (artStyle === 'editorial'){
+      if (fotoFormat === '1:1') renderEditorialSquare(octx, W, H, st, variantColors);
+      else renderEditorialTall(octx, W, H, st, variantColors);
+    } else if (fotoFormat === '1:1'){
       renderOverlaySquare(octx, W, H, st, variantColors);
     } else {
       renderOverlayTall(octx, W, H, st, variantColors);
@@ -770,7 +1144,8 @@ async function exportFoto(){
     setStatus('Gerando a imagem…');
     var blob = await compositePhotoBlob();
     var suffix = fotoFormat === '1:1' ? '-feed' : '-story';
-    downloadBlob(blob, 'giovani-' + fileBaseName() + suffix + '.jpg');
+    var styleSuffix = artStyle === 'editorial' ? '-editorial' : '';
+    downloadBlob(blob, 'giovani-' + fileBaseName() + styleSuffix + suffix + '.jpg');
     setStatus('Imagem pronta — o download deve começar sozinho.', 'ok');
   } catch (err) {
     console.error('[Studio Giovani] falha ao gerar imagem:', err);
