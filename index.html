@@ -32,10 +32,10 @@
   h1{font-family:'Fraunces', Georgia, serif; margin:0}
 
   .app{max-width:1320px; margin:0 auto; padding:32px 20px 60px; display:flex; gap:28px; align-items:flex-start;}
-  @media (max-width:860px){ .app{flex-direction:column} }
+  @media (max-width:860px){ .app{flex-direction:column; padding:20px 14px 40px; gap:20px} }
 
   .panel{width:380px; flex-shrink:0; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:26px; display:flex; flex-direction:column; gap:22px;}
-  @media (max-width:860px){ .panel{width:100%} }
+  @media (max-width:860px){ .panel{width:100%; padding:18px} }
 
   .eyebrow{font-size:13px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); font-weight:600;}
   .panel h1{font-size:26px; font-weight:600; line-height:1.15; margin-top:4px}
@@ -45,14 +45,14 @@
 
   .field{display:flex; flex-direction:column; gap:6px}
   .field label{font-size:13px; font-weight:600; color:var(--text-muted);}
-  .field input[type="text"]{font:inherit; font-size:15px; padding:11px 13px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
+  .field input[type="text"]{font:inherit; font-size:16px; padding:11px 13px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
   .field input[type="text"]:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
 
   .toggle-row{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2);}
   .toggle-row input[type="checkbox"]{width:18px; height:18px; accent-color:var(--accent); flex-shrink:0;}
   .toggle-row .toggle-field{flex:1; display:flex; flex-direction:column; gap:4px}
   .toggle-row .toggle-label{font-size:13px; font-weight:600;}
-  .toggle-row input[type="text"]{font:inherit; font-size:14px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
+  .toggle-row input[type="text"]{font:inherit; font-size:16px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
   .toggle-row.off{opacity:0.55}
   .toggle-row.off input[type="text"]{opacity:0.6}
 
@@ -73,12 +73,15 @@
   .status{font-size:13px; text-align:center; min-height:36px; color:var(--text-muted); display:flex; flex-direction:column; gap:4px; align-items:center;}
   .status[data-state="ok"]{color:#3E7A47}
   .status[data-state="error"]{color:var(--danger)}
-  .progress{width:100%; height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden; display:none;}
-  .progress.show{display:block}
-  .progress > div{height:100%; width:0%; background:var(--accent-bg); transition:width .15s}
+  .progress-row{display:none; align-items:center; gap:10px;}
+  .progress-row.show{display:flex}
+  .progress{flex:1; height:8px; border-radius:4px; background:var(--surface-2); overflow:hidden;}
+  .progress > div{height:100%; width:0%; background:var(--accent-bg); transition:width .2s}
+  .progress-label{font-size:13px; font-weight:700; color:var(--text); min-width:38px; text-align:right; font-variant-numeric:tabular-nums;}
 
   .preview-wrap{flex:1; display:flex; flex-direction:column; align-items:center; gap:16px; min-width:0;}
   .stage-shell{width:100%; display:flex; justify-content:center; padding:28px; background:var(--surface-2); border-radius:20px; border:1px solid var(--border);}
+  @media (max-width:860px){ .stage-shell{padding:14px} }
   .stage{position:relative; width:min(400px, 100%); aspect-ratio:1080/1920; border-radius:10px; overflow:hidden; box-shadow:0 18px 44px rgba(0,0,0,0.22); background:#0B2A4A;}
   .stage video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;}
   .stage canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
@@ -182,7 +185,10 @@
     <div class="download-panel">
       <button type="button" class="primary-btn" id="exportBtn" disabled>Gerar vídeo final (MP4)</button>
       <div class="hint">Processa no seu aparelho — pode levar de segundos a ~1–2 min, sem custo.</div>
-      <div class="progress" id="progressWrap"><div id="progressBar"></div></div>
+      <div class="progress-row" id="progressWrap">
+        <div class="progress"><div id="progressBar"></div></div>
+        <span class="progress-label" id="progressLabel" hidden>0%</span>
+      </div>
       <div class="status" id="status" role="status" aria-live="polite"></div>
     </div>
   </aside>

@@ -247,16 +247,49 @@ document.querySelectorAll('#variantSeg button').forEach(function(btn){
 
 // --- upload de vídeo ---
 var videoFile = null;
+var videoObjectUrl = null;
 el('videoInput').addEventListener('change', function(e){
   var file = e.target.files && e.target.files[0];
   if (!file) return;
   videoFile = file;
   el('uploadFilename').textContent = file.name;
-  var url = URL.createObjectURL(file);
-  videoEl.src = url;
-  videoEl.play().catch(function(){});
-  emptyMsg.style.display = 'none';
-  exportBtn.disabled = false;
+  if (videoObjectUrl) URL.revokeObjectURL(videoObjectUrl);
+  videoObjectUrl = URL.createObjectURL(file);
+
+  exportBtn.disabled = true;
+  setStatus('Carregando o vídeo…');
+
+  // Carregar via <video>.src às vezes não dispara o load logo após a troca
+  // de arquivo (mais comum em navegadores móveis) — forçamos com .load()
+  // e só liberamos o botão quando os metadados realmente chegarem.
+  videoEl.pause();
+  videoEl.removeAttribute('src');
+  videoEl.load();
+  videoEl.src = videoObjectUrl;
+
+  var settled = false;
+  function onReady(){
+    if (settled) return;
+    settled = true;
+    videoEl.removeEventListener('loadedmetadata', onReady);
+    videoEl.removeEventListener('error', onFail);
+    emptyMsg.style.display = 'none';
+    exportBtn.disabled = false;
+    setStatus('');
+    videoEl.play().catch(function(){});
+  }
+  function onFail(){
+    if (settled) return;
+    settled = true;
+    videoEl.removeEventListener('loadedmetadata', onReady);
+    videoEl.removeEventListener('error', onFail);
+    setStatus('Não consegui abrir esse vídeo. Tenta outro arquivo (MP4 costuma funcionar melhor).', 'error');
+  }
+  videoEl.addEventListener('loadedmetadata', onReady);
+  videoEl.addEventListener('error', onFail);
+  videoEl.load();
+  // alguns navegadores já têm os metadados prontos antes do listener anexar
+  if (videoEl.readyState >= 1) onReady();
 });
 
 function boot(){
@@ -275,6 +308,7 @@ var ffmpegInstance = null;
 var statusEl = el('status');
 var progressWrap = el('progressWrap');
 var progressBar = el('progressBar');
+var progressLabel = el('progressLabel');
 
 function setStatus(text, stateAttr){
   statusEl.dataset.state = stateAttr || '';
@@ -282,16 +316,32 @@ function setStatus(text, stateAttr){
 }
 function setProgress(pct){
   progressWrap.classList.toggle('show', pct != null);
-  if (pct != null) progressBar.style.width = Math.round(pct*100) + '%';
+  if (pct != null){
+    var shown = Math.max(0, Math.min(100, Math.round(pct*100)));
+    progressBar.style.width = shown + '%';
+    progressLabel.textContent = shown + '%';
+    progressLabel.hidden = false;
+  } else {
+    progressLabel.hidden = true;
+  }
 }
 
 async function loadFFmpeg(){
   if (ffmpegInstance) return ffmpegInstance;
-  setStatus('Carregando o motor de vídeo (primeira vez só)…');
-  var { FFmpeg } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js');
-  var { toBlobURL } = await import('https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js');
+  setStatus('Carregando o motor de vídeo (só na primeira vez)…');
+  // Os arquivos da biblioteca em si (index.js/worker.js) precisam vir do
+  // mesmo domínio do site: o navegador recusa criar um Worker a partir de
+  // um script hospedado em outro domínio (erro de segurança), então em vez
+  // de importar direto de um CDN, hospedamos uma cópia junto do site.
+  var { FFmpeg } = await import('./vendor/ffmpeg-index.js');
+  var { toBlobURL } = await import('./vendor/util-index.js');
   var ffmpeg = new FFmpeg();
-  ffmpeg.on('progress', function(p){ setProgress(p.progress); });
+  ffmpeg.on('progress', function(p){
+    // p.progress às vezes vem >1 ou oscila em clipes curtos — trava em [0,1]
+    var pct = Math.max(0, Math.min(1, p.progress || 0));
+    setProgress(pct);
+  });
+  ffmpeg.on('log', function(l){ /* útil pra depurar no console, se precisar */ });
   var baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
   await ffmpeg.load({
     coreURL: await toBlobURL(baseURL + '/ffmpeg-core.js', 'text/javascript'),
@@ -319,13 +369,14 @@ exportBtn.addEventListener('click', async function(){
     var overlayBlob = await overlayPngBlob();
     var ffmpeg = await loadFFmpeg();
 
-    setStatus('Carregando o vídeo…');
+    setStatus('Enviando o vídeo pro processador…');
+    setProgress(0);
     var videoBytes = new Uint8Array(await videoFile.arrayBuffer());
     var overlayBytes = new Uint8Array(await overlayBlob.arrayBuffer());
     await ffmpeg.writeFile('input.mp4', videoBytes);
     await ffmpeg.writeFile('overlay.png', overlayBytes);
 
-    setStatus('Gerando o vídeo final…');
+    setStatus('Queimando a arte no vídeo…');
     var filter =
       '[0:v]scale=' + W + ':' + H + ':force_original_aspect_ratio=increase,' +
       'crop=' + W + ':' + H + ',setsar=1[bg];' +
@@ -339,6 +390,7 @@ exportBtn.addEventListener('click', async function(){
       'output.mp4'
     ]);
 
+    setProgress(1);
     var data = await ffmpeg.readFile('output.mp4');
     var blob = new Blob([data.buffer], { type: 'video/mp4' });
     var url = URL.createObjectURL(blob);
@@ -348,12 +400,13 @@ exportBtn.addEventListener('click', async function(){
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setProgress(null);
     setStatus('Vídeo pronto — o download deve começar sozinho.', 'ok');
+    setTimeout(function(){ setProgress(null); }, 1500);
   } catch (err) {
-    console.error(err);
+    console.error('[Studio Giovani] falha ao gerar vídeo:', err);
     setProgress(null);
-    setStatus('Não deu pra gerar o vídeo. Tenta de novo (ou usa um vídeo menor).', 'error');
+    var detail = (err && err.message) ? ' (' + err.message + ')' : '';
+    setStatus('Não deu pra gerar o vídeo' + detail + '. Tenta de novo, ou com um vídeo menor.', 'error');
   } finally {
     exportBtn.disabled = false;
   }
