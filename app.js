@@ -350,7 +350,12 @@ async function loadFFmpeg(){
     setProgress(pct);
   });
   ffmpeg.on('log', function(l){ /* útil pra depurar no console, se precisar */ });
-  var baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+  // O worker roda como módulo ES (type:"module"), então precisa da build
+  // "esm" do core (com "export default"), não da "umd" — a versão umd só
+  // funciona carregada via importScripts em worker clássico e, se usada
+  // aqui, o import() silenciosamente não acha o default export e a
+  // biblioteca fica travada pra sempre "carregando o motor de vídeo".
+  var baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
   await ffmpeg.load({
     coreURL: await toBlobURL(baseURL + '/ffmpeg-core.js', 'text/javascript'),
     wasmURL: await toBlobURL(baseURL + '/ffmpeg-core.wasm', 'application/wasm')
