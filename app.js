@@ -1,7 +1,8 @@
 // Studio Giovani — Vídeo
 // Overlay transparente desenhado em canvas sobre o <video>; no export, o mesmo
-// overlay é gerado como PNG estático e queimado no vídeo via ffmpeg (rodando
-// no navegador, ffmpeg.wasm — sem servidor, sem custo).
+// overlay é gerado como PNG estático e enviado pro servidor (Railway), que
+// queima um em cima do outro com ffmpeg nativo — bem mais rápido que rodar
+// ffmpeg.wasm no navegador do cliente.
 "use strict";
 
 var W = 1080, H = 1920;
@@ -311,8 +312,8 @@ function boot(){
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
 else boot();
 
-// ======================= EXPORT (ffmpeg.wasm) =======================
-var ffmpegInstance = null;
+// ======================= EXPORT (servidor Railway) =======================
+var RENDER_ENDPOINT = 'https://studio-giovani-video-server-production.up.railway.app/render';
 var statusEl = el('status');
 var progressWrap = el('progressWrap');
 var progressBar = el('progressBar');
@@ -334,36 +335,6 @@ function setProgress(pct){
   }
 }
 
-async function loadFFmpeg(){
-  if (ffmpegInstance) return ffmpegInstance;
-  setStatus('Carregando o motor de vídeo (só na primeira vez)…');
-  // Os arquivos da biblioteca em si (index.js/worker.js) precisam vir do
-  // mesmo domínio do site: o navegador recusa criar um Worker a partir de
-  // um script hospedado em outro domínio (erro de segurança), então em vez
-  // de importar direto de um CDN, hospedamos uma cópia junto do site.
-  var { FFmpeg } = await import('./vendor/ffmpeg-index-b2.js');
-  var { toBlobURL } = await import('./vendor/util-index-b2.js');
-  var ffmpeg = new FFmpeg();
-  ffmpeg.on('progress', function(p){
-    // p.progress às vezes vem >1 ou oscila em clipes curtos — trava em [0,1]
-    var pct = Math.max(0, Math.min(1, p.progress || 0));
-    setProgress(pct);
-  });
-  ffmpeg.on('log', function(l){ /* útil pra depurar no console, se precisar */ });
-  // O worker roda como módulo ES (type:"module"), então precisa da build
-  // "esm" do core (com "export default"), não da "umd" — a versão umd só
-  // funciona carregada via importScripts em worker clássico e, se usada
-  // aqui, o import() silenciosamente não acha o default export e a
-  // biblioteca fica travada pra sempre "carregando o motor de vídeo".
-  var baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-  await ffmpeg.load({
-    coreURL: await toBlobURL(baseURL + '/ffmpeg-core.js', 'text/javascript'),
-    wasmURL: await toBlobURL(baseURL + '/ffmpeg-core.wasm', 'application/wasm')
-  });
-  ffmpegInstance = ffmpeg;
-  return ffmpeg;
-}
-
 function overlayPngBlob(){
   return new Promise(function(resolve){
     // o overlay já está desenhado no canvas visível (fundo transparente) —
@@ -380,32 +351,47 @@ exportBtn.addEventListener('click', async function(){
   try {
     setStatus('Preparando a arte…');
     var overlayBlob = await overlayPngBlob();
-    var ffmpeg = await loadFFmpeg();
 
     setStatus('Enviando o vídeo pro processador…');
     setProgress(0);
-    var videoBytes = new Uint8Array(await videoFile.arrayBuffer());
-    var overlayBytes = new Uint8Array(await overlayBlob.arrayBuffer());
-    await ffmpeg.writeFile('input.mp4', videoBytes);
-    await ffmpeg.writeFile('overlay.png', overlayBytes);
 
-    setStatus('Queimando a arte no vídeo…');
-    var filter =
-      '[0:v]scale=' + W + ':' + H + ':force_original_aspect_ratio=increase,' +
-      'crop=' + W + ':' + H + ',setsar=1[bg];' +
-      '[bg][1:v]overlay=0:0:format=auto[outv]';
-    await ffmpeg.exec([
-      '-i', 'input.mp4', '-i', 'overlay.png',
-      '-filter_complex', filter,
-      '-map', '[outv]', '-map', '0:a?',
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
-      '-c:a', 'aac', '-movflags', '+faststart',
-      'output.mp4'
-    ]);
+    var formData = new FormData();
+    formData.append('video', videoFile);
+    formData.append('overlay', overlayBlob, 'overlay.png');
 
-    setProgress(1);
-    var data = await ffmpeg.readFile('output.mp4');
-    var blob = new Blob([data.buffer], { type: 'video/mp4' });
+    var blob = await new Promise(function(resolve, reject){
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', RENDER_ENDPOINT);
+      xhr.responseType = 'blob';
+      xhr.upload.onprogress = function(e){
+        if (e.lengthComputable){
+          setProgress(Math.min(0.9, e.loaded / e.total * 0.9));
+        }
+      };
+      xhr.onload = function(){
+        if (xhr.status >= 200 && xhr.status < 300){
+          resolve(xhr.response);
+        } else {
+          var reader = new FileReader();
+          reader.onload = function(){
+            try {
+              var data = JSON.parse(reader.result);
+              reject(new Error(data.error || ('Erro ' + xhr.status)));
+            } catch(e){
+              reject(new Error('Erro ' + xhr.status));
+            }
+          };
+          reader.onerror = function(){ reject(new Error('Erro ' + xhr.status)); };
+          reader.readAsText(xhr.response);
+        }
+      };
+      xhr.onerror = function(){ reject(new Error('Falha de conexão com o processador de vídeo.')); };
+      xhr.send(formData);
+    });
+
+    setStatus('Finalizando…');
+    setProgress(0.95);
+
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -413,6 +399,7 @@ exportBtn.addEventListener('click', async function(){
     document.body.appendChild(a);
     a.click();
     a.remove();
+    setProgress(1);
     setStatus('Vídeo pronto — o download deve começar sozinho.', 'ok');
     setTimeout(function(){ setProgress(null); }, 1500);
   } catch (err) {
