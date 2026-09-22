@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Giovani — Vídeo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#F5F3EE; --surface:#FFFFFF; --surface-2:#EFEBE1;
+    --text:#1C1B18; --text-muted:#716B5E; --border:#E3DDCE;
+    --accent:#B9873A; --accent-bg:#C9A24D; --accent-text:#1C1B18;
+    --danger:#C43B2B; --focus:#0B2A4A;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#17181A; --surface:#201F1C; --surface-2:#28261F;
+      --text:#F1EFE9; --text-muted:#A39C8C; --border:#37342B;
+      --accent:#E2BC6E; --accent-bg:#D8B15C; --accent-text:#17181A;
+      --danger:#E06651; --focus:#E2BC6E;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#17181A; --surface:#201F1C; --surface-2:#28261F;
+    --text:#F1EFE9; --text-muted:#A39C8C; --border:#37342B;
+    --accent:#E2BC6E; --accent-bg:#D8B15C; --accent-text:#17181A;
+    --danger:#E06651; --focus:#E2BC6E;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg); color:var(--text); font-family:'Work Sans', system-ui, sans-serif;}
+  h1{font-family:'Fraunces', Georgia, serif; margin:0}
+
+  .app{max-width:1320px; margin:0 auto; padding:32px 20px 60px; display:flex; gap:28px; align-items:flex-start;}
+  @media (max-width:860px){ .app{flex-direction:column} }
+
+  .panel{width:380px; flex-shrink:0; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:26px; display:flex; flex-direction:column; gap:22px;}
+  @media (max-width:860px){ .panel{width:100%} }
+
+  .eyebrow{font-size:13px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); font-weight:600;}
+  .panel h1{font-size:26px; font-weight:600; line-height:1.15; margin-top:4px}
+
+  fieldset{border:0; padding:0; margin:0; display:flex; flex-direction:column; gap:10px}
+  legend{font-size:14px; font-weight:600; color:var(--text); padding:0 0 4px;}
+
+  .field{display:flex; flex-direction:column; gap:6px}
+  .field label{font-size:13px; font-weight:600; color:var(--text-muted);}
+  .field input[type="text"]{font:inherit; font-size:15px; padding:11px 13px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
+  .field input[type="text"]:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+
+  .toggle-row{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2);}
+  .toggle-row input[type="checkbox"]{width:18px; height:18px; accent-color:var(--accent); flex-shrink:0;}
+  .toggle-row .toggle-field{flex:1; display:flex; flex-direction:column; gap:4px}
+  .toggle-row .toggle-label{font-size:13px; font-weight:600;}
+  .toggle-row input[type="text"]{font:inherit; font-size:14px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
+  .toggle-row.off{opacity:0.55}
+  .toggle-row.off input[type="text"]{opacity:0.6}
+
+  .upload{display:flex; flex-direction:column; align-items:center; gap:8px; padding:22px 14px; border-radius:12px; border:1.5px dashed var(--border); background:var(--surface-2); cursor:pointer; text-align:center; font-size:14px; color:var(--text-muted); font-weight:600;}
+  .upload:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+  .upload strong{color:var(--text); font-size:15px}
+  .upload input{display:none}
+  .upload-hint{font-size:12px; color:var(--text-muted); text-align:center}
+
+  .swatches{display:flex; gap:10px}
+  .swatch{flex:1; font:inherit; display:flex; align-items:center; gap:8px; justify-content:center; padding:12px 10px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; font-size:14px; font-weight:600;}
+  .swatch .dot{width:14px; height:14px; border-radius:50%; flex-shrink:0}
+  .swatch[aria-pressed="true"]{border-color:var(--accent)}
+
+  .primary-btn{font:inherit; font-size:16px; font-weight:700; padding:16px 20px; border-radius:12px; border:none; background:var(--accent-bg); color:var(--accent-text); cursor:pointer;}
+  .primary-btn:disabled{opacity:0.55; cursor:default}
+  .hint{font-size:12.5px; color:var(--text-muted); text-align:center; margin-top:-10px}
+  .status{font-size:13px; text-align:center; min-height:36px; color:var(--text-muted); display:flex; flex-direction:column; gap:4px; align-items:center;}
+  .status[data-state="ok"]{color:#3E7A47}
+  .status[data-state="error"]{color:var(--danger)}
+  .progress{width:100%; height:6px; border-radius:3px; background:var(--surface-2); overflow:hidden; display:none;}
+  .progress.show{display:block}
+  .progress > div{height:100%; width:0%; background:var(--accent-bg); transition:width .15s}
+
+  .preview-wrap{flex:1; display:flex; flex-direction:column; align-items:center; gap:16px; min-width:0;}
+  .stage-shell{width:100%; display:flex; justify-content:center; padding:28px; background:var(--surface-2); border-radius:20px; border:1px solid var(--border);}
+  .stage{position:relative; width:min(400px, 100%); aspect-ratio:1080/1920; border-radius:10px; overflow:hidden; box-shadow:0 18px 44px rgba(0,0,0,0.22); background:#0B2A4A;}
+  .stage video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;}
+  .stage canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
+  .stage .empty-msg{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:rgba(159,178,198,0.85); font-size:14px; font-weight:500; padding:30px;}
+  .preview-wrap .caption{font-size:13px; color:var(--text-muted); text-align:center}
+
+  .download-panel{display:flex; flex-direction:column; gap:12px; width:100%}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <div>
+      <div class="eyebrow">Studio Giovani</div>
+      <h1>Monte seu vídeo</h1>
+    </div>
+
+    <fieldset>
+      <legend>Vídeo do imóvel</legend>
+      <label class="upload" for="videoInput" id="uploadLabel">
+        <strong>Toque para escolher o vídeo</strong>
+        <span id="uploadFilename">Nenhum vídeo escolhido ainda</span>
+        <input type="file" id="videoInput" accept="video/*">
+      </label>
+      <div class="upload-hint">Ideal: vídeo vertical (9:16). Sai em MP4 1080×1920.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Localização</legend>
+      <div class="toggle-row" data-toggle-row="localizacao">
+        <input type="checkbox" id="tg_localizacao" checked>
+        <div class="toggle-field">
+          <span class="toggle-label">Bairro, cidade</span>
+          <input type="text" id="localizacao" value="Icaraí, Niterói">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Status</legend>
+      <div class="toggle-row" data-toggle-row="status">
+        <input type="checkbox" id="tg_status" checked>
+        <div class="toggle-field">
+          <span class="toggle-label">Tag (À VENDA / VENDIDO / ALUGA-SE)</span>
+          <input type="text" id="status" value="À VENDA">
+        </div>
+      </div>
+      <div class="toggle-row" data-toggle-row="valor">
+        <input type="checkbox" id="tg_valor" checked>
+        <div class="toggle-field">
+          <span class="toggle-label">Valor</span>
+          <input type="text" id="valor" value="R$ 780.000">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>O que valoriza o imóvel</legend>
+      <div class="toggle-row" data-toggle-row="area">
+        <input type="checkbox" id="tg_area" checked>
+        <div class="toggle-field">
+          <span class="toggle-label">Área</span>
+          <input type="text" id="area" value="98 m²">
+        </div>
+      </div>
+      <div class="toggle-row" data-toggle-row="quartos">
+        <input type="checkbox" id="tg_quartos" checked>
+        <div class="toggle-field">
+          <span class="toggle-label">Quartos</span>
+          <input type="text" id="quartos" value="3 quartos">
+        </div>
+      </div>
+      <div class="toggle-row" data-toggle-row="vagas">
+        <input type="checkbox" id="tg_vagas" checked>
+        <div class="toggle-field">
+          <span class="toggle-label">Vagas</span>
+          <input type="text" id="vagas" value="1 vaga na escritura">
+        </div>
+      </div>
+      <div class="toggle-row" data-toggle-row="destaque">
+        <input type="checkbox" id="tg_destaque" checked>
+        <div class="toggle-field">
+          <span class="toggle-label">Diferencial</span>
+          <input type="text" id="destaque" value="Vista para a baía">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Cor de destaque</legend>
+      <div class="swatches" id="variantSeg" role="group" aria-label="Cor de destaque">
+        <button type="button" class="swatch" data-variant="red" aria-pressed="true">
+          <span class="dot" style="background:#DC1C2E"></span> RE/MAX
+        </button>
+        <button type="button" class="swatch" data-variant="gold" aria-pressed="false">
+          <span class="dot" style="background:#C9A24D"></span> Dourado
+        </button>
+      </div>
+    </fieldset>
+
+    <div class="download-panel">
+      <button type="button" class="primary-btn" id="exportBtn" disabled>Gerar vídeo final (MP4)</button>
+      <div class="hint">Processa no seu aparelho — pode levar de segundos a ~1–2 min, sem custo.</div>
+      <div class="progress" id="progressWrap"><div id="progressBar"></div></div>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+    </div>
+  </aside>
+
+  <div class="preview-wrap">
+    <div class="stage-shell">
+      <div class="stage" id="stage">
+        <video id="previewVideo" muted playsinline loop></video>
+        <canvas id="cv" width="1080" height="1920"></canvas>
+        <div class="empty-msg" id="emptyMsg">Escolha o vídeo do imóvel ao lado<br>pra ver a prévia com a arte por cima</div>
+      </div>
+    </div>
+    <div class="caption">É assim que fica no Reels/Stories. Ajuste ao lado e a prévia atualiza sozinha.</div>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
