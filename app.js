@@ -341,8 +341,8 @@ async function loadFFmpeg(){
   // mesmo domínio do site: o navegador recusa criar um Worker a partir de
   // um script hospedado em outro domínio (erro de segurança), então em vez
   // de importar direto de um CDN, hospedamos uma cópia junto do site.
-  var { FFmpeg } = await import('./vendor/ffmpeg-index.js');
-  var { toBlobURL } = await import('./vendor/util-index.js');
+  var { FFmpeg } = await import('./vendor/ffmpeg-index-b2.js');
+  var { toBlobURL } = await import('./vendor/util-index-b2.js');
   var ffmpeg = new FFmpeg();
   ffmpeg.on('progress', function(p){
     // p.progress às vezes vem >1 ou oscila em clipes curtos — trava em [0,1]
