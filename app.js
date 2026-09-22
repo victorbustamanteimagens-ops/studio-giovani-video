@@ -248,9 +248,15 @@ document.querySelectorAll('#variantSeg button').forEach(function(btn){
 // --- upload de vídeo ---
 var videoFile = null;
 var videoObjectUrl = null;
+var videoLoadGen = 0; // guarda contra o evento "change" disparando mais de
+                       // uma vez pro mesmo upload (acontece em alguns fluxos
+                       // automatizados/móveis) — sem isso, a resposta de uma
+                       // chamada antiga podia "reativar" o botão de exportar
+                       // mesmo com o vídeo ainda não carregado de verdade.
 el('videoInput').addEventListener('change', function(e){
   var file = e.target.files && e.target.files[0];
   if (!file) return;
+  var myGen = ++videoLoadGen;
   videoFile = file;
   el('uploadFilename').textContent = file.name;
   if (videoObjectUrl) URL.revokeObjectURL(videoObjectUrl);
@@ -259,20 +265,16 @@ el('videoInput').addEventListener('change', function(e){
   exportBtn.disabled = true;
   setStatus('Carregando o vídeo…');
 
-  // Carregar via <video>.src às vezes não dispara o load logo após a troca
-  // de arquivo (mais comum em navegadores móveis) — forçamos com .load()
-  // e só liberamos o botão quando os metadados realmente chegarem.
-  videoEl.pause();
-  videoEl.removeAttribute('src');
-  videoEl.load();
-  videoEl.src = videoObjectUrl;
-
   var settled = false;
+  function cleanup(){
+    videoEl.removeEventListener('loadedmetadata', onReady);
+    videoEl.removeEventListener('error', onFail);
+  }
   function onReady(){
     if (settled) return;
     settled = true;
-    videoEl.removeEventListener('loadedmetadata', onReady);
-    videoEl.removeEventListener('error', onFail);
+    cleanup();
+    if (myGen !== videoLoadGen) return; // um upload mais novo já assumiu — ignora este resultado velho
     emptyMsg.style.display = 'none';
     exportBtn.disabled = false;
     setStatus('');
@@ -281,15 +283,21 @@ el('videoInput').addEventListener('change', function(e){
   function onFail(){
     if (settled) return;
     settled = true;
-    videoEl.removeEventListener('loadedmetadata', onReady);
-    videoEl.removeEventListener('error', onFail);
+    cleanup();
+    if (myGen !== videoLoadGen) return;
     setStatus('Não consegui abrir esse vídeo. Tenta outro arquivo (MP4 costuma funcionar melhor).', 'error');
   }
   videoEl.addEventListener('loadedmetadata', onReady);
   videoEl.addEventListener('error', onFail);
+
+  // Carregar via <video>.src às vezes não dispara o load logo após a troca
+  // de arquivo (mais comum em navegadores móveis) — forçamos com .load()
+  // e só liberamos o botão quando os metadados realmente chegarem.
+  videoEl.pause();
+  videoEl.removeAttribute('src');
   videoEl.load();
-  // alguns navegadores já têm os metadados prontos antes do listener anexar
-  if (videoEl.readyState >= 1) onReady();
+  videoEl.src = videoObjectUrl;
+  videoEl.load();
 });
 
 function boot(){
