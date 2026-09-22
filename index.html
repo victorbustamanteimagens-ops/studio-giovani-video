@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Studio Giovani — Vídeo</title>
+<title>Studio Giovani</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap">
 <style>
   :root{
@@ -41,6 +41,7 @@
   .panel h1{font-size:26px; font-weight:600; line-height:1.15; margin-top:4px}
 
   fieldset{border:0; padding:0; margin:0; display:flex; flex-direction:column; gap:10px}
+  [hidden]{display:none !important;}
   legend{font-size:14px; font-weight:600; color:var(--text); padding:0 0 4px;}
 
   .field{display:flex; flex-direction:column; gap:6px}
@@ -51,7 +52,7 @@
   .toggle-row{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2);}
   .toggle-row input[type="checkbox"]{width:18px; height:18px; accent-color:var(--accent); flex-shrink:0;}
   .toggle-row .toggle-field{flex:1; display:flex; flex-direction:column; gap:4px}
-  .toggle-row .toggle-label{font-size:13px; font-weight:600;}
+  .toggle-row .toggle-label{font-size:13px; font-weight:600}
   .toggle-row input[type="text"]{font:inherit; font-size:16px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
   .toggle-row.off{opacity:0.55}
   .toggle-row.off input[type="text"]{opacity:0.6}
@@ -67,8 +68,13 @@
   .swatch .dot{width:14px; height:14px; border-radius:50%; flex-shrink:0}
   .swatch[aria-pressed="true"]{border-color:var(--accent)}
 
+  .tabs{display:flex; gap:8px; padding:4px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border);}
+  .tab{flex:1; font:inherit; font-size:13.5px; font-weight:700; padding:10px 8px; border-radius:8px; border:none; background:transparent; color:var(--text-muted); cursor:pointer;}
+  .tab[aria-pressed="true"]{background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,0.12);}
+
   .primary-btn{font:inherit; font-size:16px; font-weight:700; padding:16px 20px; border-radius:12px; border:none; background:var(--accent-bg); color:var(--accent-text); cursor:pointer;}
   .primary-btn:disabled{opacity:0.55; cursor:default}
+  .secondary-btn{font:inherit; font-size:13.5px; font-weight:700; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer;}
   .hint{font-size:12.5px; color:var(--text-muted); text-align:center; margin-top:-10px}
   .status{font-size:13px; text-align:center; min-height:36px; color:var(--text-muted); display:flex; flex-direction:column; gap:4px; align-items:center;}
   .status[data-state="ok"]{color:#3E7A47}
@@ -79,13 +85,20 @@
   .progress > div{height:100%; width:0%; background:var(--accent-bg); transition:width .2s}
   .progress-label{font-size:13px; font-weight:700; color:var(--text); min-width:38px; text-align:right; font-variant-numeric:tabular-nums;}
 
+  .zoom-row{display:flex; align-items:center; gap:10px;}
+  .zoom-row input[type="range"]{flex:1; accent-color:var(--accent);}
+  .zoom-row .zoom-label{font-size:13px; font-weight:700; min-width:38px; text-align:right; font-variant-numeric:tabular-nums;}
+  .reposition-hint{font-size:12px; color:var(--text-muted); text-align:center;}
+
   .preview-wrap{flex:1; display:flex; flex-direction:column; align-items:center; gap:16px; min-width:0;}
   .stage-shell{width:100%; display:flex; justify-content:center; padding:28px; background:var(--surface-2); border-radius:20px; border:1px solid var(--border);}
   @media (max-width:860px){ .stage-shell{padding:14px} }
-  .stage{position:relative; width:min(400px, 100%); aspect-ratio:1080/1920; border-radius:10px; overflow:hidden; box-shadow:0 18px 44px rgba(0,0,0,0.22); background:#0B2A4A;}
+  .stage{position:relative; width:min(400px, 100%); aspect-ratio:1080/1920; border-radius:10px; overflow:hidden; box-shadow:0 18px 44px rgba(0,0,0,0.22); background:#0B2A4A; touch-action:none;}
   .stage video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;}
-  .stage canvas{position:absolute; inset:0; width:100%; height:100%; display:block;}
-  .stage .empty-msg{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:rgba(159,178,198,0.85); font-size:14px; font-weight:500; padding:30px;}
+  .stage img#previewPhoto{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; user-select:none; -webkit-user-drag:none; cursor:grab;}
+  .stage img#previewPhoto.dragging{cursor:grabbing;}
+  .stage canvas{position:absolute; inset:0; width:100%; height:100%; display:block; pointer-events:none;}
+  .stage .empty-msg{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:rgba(159,178,198,0.85); font-size:14px; font-weight:500; padding:30px; pointer-events:none;}
   .preview-wrap .caption{font-size:13px; color:var(--text-muted); text-align:center}
 
   .download-panel{display:flex; flex-direction:column; gap:12px; width:100%}
@@ -96,10 +109,18 @@
   <aside class="panel">
     <div>
       <div class="eyebrow">Studio Giovani</div>
-      <h1>Monte seu vídeo</h1>
+      <h1 id="pageTitle">Monte seu conteúdo</h1>
     </div>
 
     <fieldset>
+      <legend>O que você vai criar</legend>
+      <div class="tabs" id="modeSeg" role="group" aria-label="Tipo de conteúdo">
+        <button type="button" class="tab" data-mode="video" aria-pressed="true">Vídeo</button>
+        <button type="button" class="tab" data-mode="foto" aria-pressed="false">Foto</button>
+      </div>
+    </fieldset>
+
+    <fieldset id="videoUploadSection">
       <legend>Vídeo do imóvel</legend>
       <label class="upload" for="videoInput" id="uploadLabel">
         <strong>Toque para escolher o vídeo</strong>
@@ -107,6 +128,29 @@
         <input type="file" id="videoInput" accept="video/*">
       </label>
       <div class="upload-hint">Ideal: vídeo vertical (9:16). Sai em MP4 1080×1920.</div>
+    </fieldset>
+
+    <fieldset id="fotoUploadSection" hidden>
+      <legend>Formato</legend>
+      <div class="tabs" id="formatSeg" role="group" aria-label="Formato da foto">
+        <button type="button" class="tab" data-format="9:16" aria-pressed="true">Story / Reels (9:16)</button>
+        <button type="button" class="tab" data-format="1:1" aria-pressed="false">Feed (1:1)</button>
+      </div>
+
+      <legend style="margin-top:6px">Foto do imóvel</legend>
+      <label class="upload" for="fotoInput" id="fotoUploadLabel">
+        <strong>Toque para escolher a foto</strong>
+        <span id="fotoFilename">Nenhuma foto escolhida ainda</span>
+        <input type="file" id="fotoInput" accept="image/*">
+      </label>
+
+      <div class="zoom-row">
+        <span class="toggle-label">Zoom</span>
+        <input type="range" id="fotoZoom" min="1" max="3" step="0.05" value="1">
+        <span class="zoom-label" id="fotoZoomLabel">1.0x</span>
+      </div>
+      <button type="button" class="secondary-btn" id="fotoCenterBtn">Centralizar foto</button>
+      <div class="reposition-hint">Arraste a foto na prévia ao lado pra reposicionar</div>
     </fieldset>
 
     <fieldset>
@@ -184,12 +228,12 @@
 
     <div class="download-panel">
       <button type="button" class="primary-btn" id="exportBtn" disabled>Gerar vídeo final (MP4)</button>
-      <div class="hint">Processamos no servidor — geralmente leva só alguns segundos.</div>
+      <div class="hint" id="exportHint">Processamos no servidor — geralmente leva só alguns segundos.</div>
       <div class="progress-row" id="progressWrap">
         <div class="progress"><div id="progressBar"></div></div>
         <span class="progress-label" id="progressLabel" hidden>0%</span>
       </div>
-      <div class="status" id="status" role="status" aria-live="polite"></div>
+      <div class="status" id="statusMsg" role="status" aria-live="polite"></div>
     </div>
   </aside>
 
@@ -197,14 +241,15 @@
     <div class="stage-shell">
       <div class="stage" id="stage">
         <video id="previewVideo" muted playsinline loop></video>
+        <img id="previewPhoto" alt="">
         <canvas id="cv" width="1080" height="1920"></canvas>
         <div class="empty-msg" id="emptyMsg">Escolha o vídeo do imóvel ao lado<br>pra ver a prévia com a arte por cima</div>
       </div>
     </div>
-    <div class="caption">É assim que fica no Reels/Stories. Ajuste ao lado e a prévia atualiza sozinha.</div>
+    <div class="caption" id="stageCaption">É assim que fica no Reels/Stories. Ajuste ao lado e a prévia atualiza sozinha.</div>
   </div>
 </div>
 
-<script type="module" src="./app.js?v=2"></script>
+<script type="module" src="./app.js?v=3"></script>
 </body>
 </html>

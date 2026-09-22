@@ -1,11 +1,11 @@
-// Studio Giovani — Vídeo
-// Overlay transparente desenhado em canvas sobre o <video>; no export, o mesmo
-// overlay é gerado como PNG estático e enviado pro servidor (Railway), que
-// queima um em cima do outro com ffmpeg nativo — bem mais rápido que rodar
-// ffmpeg.wasm no navegador do cliente.
+// Studio Giovani — Vídeo & Foto
+// Overlay desenhado em canvas transparente sobre o <video> ou a <img> da
+// prévia. No export de vídeo, o overlay vira PNG estático e vai pro servidor
+// (Railway), que queima um em cima do outro com ffmpeg nativo. No export de
+// foto não precisa de servidor: montamos tudo (foto + overlay) num canvas
+// escondido e baixamos o JPG direto no navegador.
 "use strict";
 
-var W = 1080, H = 1920;
 var NAVY = '#0B2A4A';
 var CREAM = '#F4F0E6';
 var RED = '#DC1C2E';
@@ -28,11 +28,38 @@ remaxIcon.src = './remax-pin.png';
 var canvas = document.getElementById('cv');
 var ctx = canvas.getContext('2d');
 var videoEl = document.getElementById('previewVideo');
+var photoEl = document.getElementById('previewPhoto');
 var stageEl = document.getElementById('stage');
 var emptyMsg = document.getElementById('emptyMsg');
 var exportBtn = document.getElementById('exportBtn');
+var stageCaption = document.getElementById('stageCaption');
+var exportHint = document.getElementById('exportHint');
+var pageTitle = document.getElementById('pageTitle');
 
 function el(id){ return document.getElementById(id); }
+
+// refs usadas pelo status/progresso — precisam existir antes do boot(),
+// que já chama applyMode()/setStatus() durante a inicialização.
+var statusEl = el('statusMsg');
+var progressWrap = el('progressWrap');
+var progressBar = el('progressBar');
+var progressLabel = el('progressLabel');
+
+function setStatus(text, stateAttr){
+  statusEl.dataset.state = stateAttr || '';
+  statusEl.textContent = text;
+}
+function setProgress(pct){
+  progressWrap.classList.toggle('show', pct != null);
+  if (pct != null){
+    var shown = Math.max(0, Math.min(100, Math.round(pct*100)));
+    progressBar.style.width = shown + '%';
+    progressLabel.textContent = shown + '%';
+    progressLabel.hidden = false;
+  } else {
+    progressLabel.hidden = true;
+  }
+}
 
 function readState(){
   return {
@@ -45,6 +72,20 @@ function readState(){
     vagas:       { on: el('tg_vagas').checked, value: el('vagas').value.trim() },
     destaque:    { on: el('tg_destaque').checked, value: el('destaque').value.trim() }
   };
+}
+
+function variantColorsFor(st){
+  return st.variant === 'gold' ? { bg: GOLD, text: NAVY } : { bg: RED, text: CREAM };
+}
+
+function amenityRows(st){
+  var rows = [];
+  if (st.localizacao.on && st.localizacao.value) rows.push({ icon: 'pin', label: st.localizacao.value });
+  if (st.area.on && st.area.value) rows.push({ icon: 'area', label: st.area.value });
+  if (st.quartos.on && st.quartos.value) rows.push({ icon: 'bed', label: st.quartos.value });
+  if (st.vagas.on && st.vagas.value) rows.push({ icon: 'car', label: st.vagas.value });
+  if (st.destaque.on && st.destaque.value) rows.push({ icon: 'star', label: st.destaque.value });
+  return rows;
 }
 
 function roundRectPath(ctx, x, y, w, h, r){
@@ -100,7 +141,7 @@ function drawSolidBox(ctx, x, y, text, opts){
   var family = opts.family || 'Work Sans';
   var padX = opts.padX != null ? opts.padX : 26;
   var padY = opts.padY != null ? opts.padY : 16;
-  var maxW = opts.maxW || (W - x - 60);
+  var maxW = opts.maxW || 900;
   ctx.font = weight + ' ' + fontSize + 'px "' + family + '"';
   if (opts.letterSpacing) trySetLetterSpacing(ctx, opts.letterSpacing);
   var textW = Math.min(ctx.measureText(text).width, maxW);
@@ -122,15 +163,8 @@ function drawSolidBox(ctx, x, y, text, opts){
   return boxH;
 }
 
-function render(){
-  var st = readState();
-  ctx.clearRect(0, 0, W, H);
-
-  var variantColors = st.variant === 'gold'
-    ? { bg: GOLD, text: NAVY }
-    : { bg: RED, text: CREAM };
-
-  // --- crachá RE/MAX — fixo, canto superior direito ---
+// --- layout 9:16 (Reels/Stories) — o mesmo padrão usado no vídeo ---
+function renderOverlayTall(ctx, W, H, st, variantColors){
   var badgeSize = 92;
   var badgeX = W - 56 - badgeSize;
   var badgeY = 56;
@@ -145,14 +179,13 @@ function render(){
     ctx.restore();
   }
 
-  // --- topo: tag de status + valor (caixas sólidas, cor de destaque) ---
   var topX = 64, topY = 150;
   var cursor = topY;
   if (st.status.on && st.status.value){
     cursor += drawSolidBox(ctx, topX, cursor, st.status.value.toUpperCase(), {
       fontSize: 54, weight: '800', family: 'Fraunces',
       bg: variantColors.bg, textColor: variantColors.text,
-      letterSpacing: 1.5, padX: 30, padY: 18, radius: 4
+      letterSpacing: 1.5, padX: 30, padY: 18, radius: 4, maxW: W - topX - 60
     });
     cursor += 14;
   }
@@ -160,18 +193,11 @@ function render(){
     drawSolidBox(ctx, topX, cursor, st.valor.value, {
       fontSize: 40, weight: '700', family: 'Fraunces',
       bg: variantColors.bg, textColor: variantColors.text,
-      padX: 26, padY: 15, radius: 4
+      padX: 26, padY: 15, radius: 4, maxW: W - topX - 60
     });
   }
 
-  // --- lista inferior: linhas ícone (glow) + caixa azul sólida com o dado ---
-  var rows = [];
-  if (st.localizacao.on && st.localizacao.value) rows.push({ icon: 'pin', label: st.localizacao.value });
-  if (st.area.on && st.area.value) rows.push({ icon: 'area', label: st.area.value });
-  if (st.quartos.on && st.quartos.value) rows.push({ icon: 'bed', label: st.quartos.value });
-  if (st.vagas.on && st.vagas.value) rows.push({ icon: 'car', label: st.vagas.value });
-  if (st.destaque.on && st.destaque.value) rows.push({ icon: 'star', label: st.destaque.value });
-
+  var rows = amenityRows(st);
   var listX = 64;
   var listY = 1230;
   var iconSize = 38;
@@ -212,7 +238,6 @@ function render(){
     rowY += rowH + rowGap;
   }
 
-  // --- rodapé fixo: nome + CRECI (sempre visível, qualquer configuração) ---
   var footerY = H - 70;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.7)';
@@ -230,6 +255,125 @@ function render(){
   ctx.restore();
 }
 
+// --- layout 1:1 (feed) — mesma arte, agrupada num bloco só perto do rodapé
+// com um degradê atrás pra ficar legível em qualquer foto ---
+function renderOverlaySquare(ctx, W, H, st, variantColors){
+  var scrimTop = Math.round(H * 0.50);
+  var grad = ctx.createLinearGradient(0, scrimTop, 0, H);
+  grad.addColorStop(0, 'rgba(9,16,26,0)');
+  grad.addColorStop(1, 'rgba(9,16,26,0.86)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, scrimTop, W, H - scrimTop);
+
+  var badgeSize = 76;
+  var badgeX = W - 40 - badgeSize;
+  var badgeY = 40;
+  if (remaxIconReady){
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 3;
+    var iconH = badgeSize;
+    var iconW = iconH * (remaxIcon.width / remaxIcon.height);
+    ctx.drawImage(remaxIcon, badgeX + badgeSize - iconW, badgeY, iconW, iconH);
+    ctx.restore();
+  }
+
+  var x = 48;
+  var cursor = Math.round(H * 0.595);
+  if (st.status.on && st.status.value){
+    cursor += drawSolidBox(ctx, x, cursor, st.status.value.toUpperCase(), {
+      fontSize: 36, weight: '800', family: 'Fraunces',
+      bg: variantColors.bg, textColor: variantColors.text,
+      letterSpacing: 1.2, padX: 22, padY: 13, radius: 4, maxW: W - x - 100
+    });
+    cursor += 10;
+  }
+  if (st.valor.on && st.valor.value){
+    cursor += drawSolidBox(ctx, x, cursor, st.valor.value, {
+      fontSize: 28, weight: '700', family: 'Fraunces',
+      bg: variantColors.bg, textColor: variantColors.text,
+      padX: 20, padY: 11, radius: 4, maxW: W - x - 100
+    });
+    cursor += 18;
+  } else {
+    cursor += 8;
+  }
+
+  var rows = amenityRows(st);
+  var iconSize = 26, rowGap = 12, labelFontSize = 21, labelPadX = 14, labelPadY = 8;
+  ctx.font = '700 ' + labelFontSize + 'px "Work Sans"';
+  var rowY = cursor;
+  for (var i = 0; i < rows.length; i++){
+    var row = rows[i];
+    var textW = ctx.measureText(row.label).width;
+    var boxH = labelFontSize + labelPadY*2;
+    var rowH = Math.max(iconSize, boxH);
+    var iconCy = rowY + rowH/2;
+
+    if (row.icon === 'pin'){
+      drawGlowIcon(ctx, PIN_PATH, x, iconCy - iconSize/2, iconSize, { hole: PIN_HOLE });
+    } else if (row.icon === 'area'){
+      drawGlowIcon(ctx, AREA_PATH, x, iconCy - iconSize/2, iconSize, {});
+    } else if (row.icon === 'bed'){
+      drawGlowIcon(ctx, BED_PATH, x, iconCy - iconSize/2, iconSize, {});
+    } else if (row.icon === 'car'){
+      drawGlowIcon(ctx, CAR_PATH, x, iconCy - iconSize/2, iconSize, {});
+    } else if (row.icon === 'star'){
+      drawFillIconGlow(ctx, STAR_PATH, x, iconCy - iconSize/2, iconSize, GOLD_LIGHT);
+    }
+
+    var labelX = x + iconSize + 16;
+    var labelY = rowY + rowH/2 - boxH/2;
+    ctx.fillStyle = BLUE_ROW;
+    roundRectPath(ctx, labelX, labelY, textW + labelPadX*2, boxH, 4);
+    ctx.fill();
+    ctx.fillStyle = CREAM;
+    ctx.textAlign = 'left';
+    ctx.fillText(row.label, labelX + labelPadX, labelY + boxH/2 + labelFontSize*0.34);
+
+    rowY += rowH + rowGap;
+  }
+
+  var footerY = H - 34;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.7)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = CREAM;
+  ctx.font = '600 26px "Fraunces"';
+  ctx.textAlign = 'left';
+  ctx.fillText('Giovani Oliveira', x, footerY);
+  ctx.font = '400 17px "Work Sans"';
+  trySetLetterSpacing(ctx, 1.2);
+  ctx.fillStyle = 'rgba(244,240,230,0.85)';
+  ctx.fillText('RE/MAX AXXIA IMÓVEIS · CRECI 110.031', x, footerY + 22);
+  trySetLetterSpacing(ctx, 0);
+  ctx.restore();
+}
+
+// ============================ estado geral ============================
+var mode = 'video';       // 'video' | 'foto'
+var fotoFormat = '9:16';  // '9:16' | '1:1'
+
+function currentW(){ return 1080; }
+function currentH(){
+  if (mode === 'foto' && fotoFormat === '1:1') return 1080;
+  return 1920;
+}
+
+function render(){
+  var st = readState();
+  var variantColors = variantColorsFor(st);
+  var W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (mode === 'foto' && fotoFormat === '1:1'){
+    renderOverlaySquare(ctx, W, H, st, variantColors);
+  } else {
+    renderOverlayTall(ctx, W, H, st, variantColors);
+  }
+}
+
 ['localizacao','status','valor','area','quartos','vagas','destaque'].forEach(function(key){
   el(key).addEventListener('input', render);
   el('tg_' + key).addEventListener('change', function(){
@@ -245,6 +389,11 @@ document.querySelectorAll('#variantSeg button').forEach(function(btn){
     render();
   });
 });
+
+function updateEmptyMsg(){
+  var loaded = mode === 'foto' ? !!photoImg : !!videoFile;
+  emptyMsg.style.display = loaded ? 'none' : 'flex';
+}
 
 // --- upload de vídeo ---
 var videoFile = null;
@@ -276,7 +425,7 @@ el('videoInput').addEventListener('change', function(e){
     settled = true;
     cleanup();
     if (myGen !== videoLoadGen) return; // um upload mais novo já assumiu — ignora este resultado velho
-    emptyMsg.style.display = 'none';
+    updateEmptyMsg();
     exportBtn.disabled = false;
     setStatus('');
     videoEl.play().catch(function(){});
@@ -301,7 +450,192 @@ el('videoInput').addEventListener('change', function(e){
   videoEl.load();
 });
 
+// ============================ modo foto ============================
+var photoImg = null;
+var photoObjectUrl = null;
+var photoZoom = 1;
+var photoPanXFrac = 0; // fração do W, independente do tamanho de tela
+var photoPanYFrac = 0;
+
+function photoBaseScale(W, H){
+  if (!photoImg) return 1;
+  return Math.max(W / photoImg.naturalWidth, H / photoImg.naturalHeight);
+}
+
+function clampPhotoPan(){
+  if (!photoImg) return;
+  var W = currentW(), H = currentH();
+  var scale = photoBaseScale(W, H) * photoZoom;
+  var drawW = photoImg.naturalWidth * scale;
+  var drawH = photoImg.naturalHeight * scale;
+  var maxPanXFrac = Math.max(0, (drawW - W) / 2) / W;
+  var maxPanYFrac = Math.max(0, (drawH - H) / 2) / H;
+  photoPanXFrac = Math.max(-maxPanXFrac, Math.min(maxPanXFrac, photoPanXFrac));
+  photoPanYFrac = Math.max(-maxPanYFrac, Math.min(maxPanYFrac, photoPanYFrac));
+}
+
+function updatePhotoTransform(){
+  var rect = stageEl.getBoundingClientRect();
+  var cssW = rect.width || 1;
+  var cssH = rect.height || 1;
+  var panXpx = photoPanXFrac * cssW;
+  var panYpx = photoPanYFrac * cssH;
+  photoEl.style.transform = 'translate(' + panXpx + 'px,' + panYpx + 'px) scale(' + photoZoom + ')';
+}
+
+function drawPhotoOnCtx(targetCtx, W, H){
+  if (!photoImg) return;
+  var scale = photoBaseScale(W, H) * photoZoom;
+  var drawW = photoImg.naturalWidth * scale;
+  var drawH = photoImg.naturalHeight * scale;
+  var x = (W - drawW) / 2 + photoPanXFrac * W;
+  var y = (H - drawH) / 2 + photoPanYFrac * H;
+  targetCtx.drawImage(photoImg, x, y, drawW, drawH);
+}
+
+el('fotoInput').addEventListener('change', function(e){
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+  if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl);
+  photoObjectUrl = URL.createObjectURL(file);
+
+  exportBtn.disabled = true;
+  setStatus('Carregando a foto…');
+
+  var img = new Image();
+  img.onload = function(){
+    photoImg = img;
+    photoEl.src = photoObjectUrl;
+    el('fotoFilename').textContent = file.name;
+    photoZoom = 1;
+    photoPanXFrac = 0;
+    photoPanYFrac = 0;
+    el('fotoZoom').value = '1';
+    el('fotoZoomLabel').textContent = '1.0x';
+    updatePhotoTransform();
+    updateEmptyMsg();
+    exportBtn.disabled = false;
+    setStatus('');
+  };
+  img.onerror = function(){
+    setStatus('Não consegui abrir essa foto. Tenta outro arquivo (JPG ou PNG).', 'error');
+  };
+  img.src = photoObjectUrl;
+});
+
+el('fotoZoom').addEventListener('input', function(){
+  photoZoom = parseFloat(this.value) || 1;
+  el('fotoZoomLabel').textContent = photoZoom.toFixed(1) + 'x';
+  clampPhotoPan();
+  updatePhotoTransform();
+});
+
+el('fotoCenterBtn').addEventListener('click', function(){
+  photoPanXFrac = 0;
+  photoPanYFrac = 0;
+  updatePhotoTransform();
+});
+
+// arraste na prévia pra reposicionar a foto
+var dragging = false, dragStartX = 0, dragStartY = 0, dragStartPanX = 0, dragStartPanY = 0, dragCssW = 1, dragCssH = 1;
+photoEl.addEventListener('pointerdown', function(e){
+  if (mode !== 'foto' || !photoImg) return;
+  dragging = true;
+  photoEl.classList.add('dragging');
+  var rect = stageEl.getBoundingClientRect();
+  dragCssW = rect.width || 1;
+  dragCssH = rect.height || 1;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragStartPanX = photoPanXFrac;
+  dragStartPanY = photoPanYFrac;
+  try { photoEl.setPointerCapture(e.pointerId); } catch(err){}
+});
+photoEl.addEventListener('pointermove', function(e){
+  if (!dragging) return;
+  var dx = e.clientX - dragStartX;
+  var dy = e.clientY - dragStartY;
+  photoPanXFrac = dragStartPanX + dx / dragCssW;
+  photoPanYFrac = dragStartPanY + dy / dragCssH;
+  clampPhotoPan();
+  updatePhotoTransform();
+});
+function endDrag(){
+  dragging = false;
+  photoEl.classList.remove('dragging');
+}
+photoEl.addEventListener('pointerup', endDrag);
+photoEl.addEventListener('pointercancel', endDrag);
+
+// --- abas de formato (Story/Reels 9:16 · Feed 1:1) ---
+document.querySelectorAll('#formatSeg button').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('#formatSeg button').forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
+    btn.setAttribute('aria-pressed', 'true');
+    fotoFormat = btn.getAttribute('data-format');
+    applyFormat();
+  });
+});
+
+function applyFormat(){
+  var W = currentW(), H = currentH();
+  canvas.width = W;
+  canvas.height = H;
+  stageEl.style.aspectRatio = W + '/' + H;
+  photoPanXFrac = 0;
+  photoPanYFrac = 0;
+  requestAnimationFrame(function(){
+    updatePhotoTransform();
+    render();
+  });
+  stageCaption.textContent = fotoFormat === '1:1'
+    ? 'É assim que fica no feed do Instagram. Ajuste ao lado e a prévia atualiza sozinha.'
+    : 'É assim que fica no Reels/Stories. Ajuste ao lado e a prévia atualiza sozinha.';
+}
+
+// --- abas de modo (Vídeo · Foto) ---
+document.querySelectorAll('#modeSeg button').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('#modeSeg button').forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
+    btn.setAttribute('aria-pressed', 'true');
+    mode = btn.getAttribute('data-mode');
+    applyMode();
+  });
+});
+
+function applyMode(){
+  var isFoto = mode === 'foto';
+  el('videoUploadSection').hidden = isFoto;
+  el('fotoUploadSection').hidden = !isFoto;
+  videoEl.style.display = isFoto ? 'none' : 'block';
+  photoEl.style.display = isFoto ? 'block' : 'none';
+  pageTitle.textContent = isFoto ? 'Monte seu post' : 'Monte seu vídeo';
+  exportBtn.textContent = isFoto ? 'Gerar imagem final (JPG)' : 'Gerar vídeo final (MP4)';
+  exportHint.textContent = isFoto
+    ? 'Processamos aqui mesmo no navegador — é instantâneo.'
+    : 'Processamos no servidor — geralmente leva só alguns segundos.';
+  emptyMsg.innerHTML = isFoto
+    ? 'Escolha a foto do imóvel ao lado<br>pra ver a prévia com a arte por cima'
+    : 'Escolha o vídeo do imóvel ao lado<br>pra ver a prévia com a arte por cima';
+  setStatus('');
+  setProgress(null);
+
+  if (isFoto){
+    applyFormat();
+    exportBtn.disabled = !photoImg;
+  } else {
+    canvas.width = 1080;
+    canvas.height = 1920;
+    stageEl.style.aspectRatio = '1080/1920';
+    stageCaption.textContent = 'É assim que fica no Reels/Stories. Ajuste ao lado e a prévia atualiza sozinha.';
+    render();
+    exportBtn.disabled = !videoFile;
+  }
+  updateEmptyMsg();
+}
+
 function boot(){
+  applyMode();
   render();
   var families = ['700 30px "Work Sans"', '800 54px "Fraunces"', '700 40px "Fraunces"', '600 34px "Fraunces"'];
   Promise.all(families.map(function(f){
@@ -312,28 +646,12 @@ function boot(){
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
 else boot();
 
-// ======================= EXPORT (servidor Railway) =======================
-var RENDER_ENDPOINT = 'https://studio-giovani-video-server-production.up.railway.app/render';
-var statusEl = el('status');
-var progressWrap = el('progressWrap');
-var progressBar = el('progressBar');
-var progressLabel = el('progressLabel');
+window.addEventListener('resize', function(){
+  if (mode === 'foto') updatePhotoTransform();
+});
 
-function setStatus(text, stateAttr){
-  statusEl.dataset.state = stateAttr || '';
-  statusEl.textContent = text;
-}
-function setProgress(pct){
-  progressWrap.classList.toggle('show', pct != null);
-  if (pct != null){
-    var shown = Math.max(0, Math.min(100, Math.round(pct*100)));
-    progressBar.style.width = shown + '%';
-    progressLabel.textContent = shown + '%';
-    progressLabel.hidden = false;
-  } else {
-    progressLabel.hidden = true;
-  }
-}
+// ======================= EXPORT (servidor Railway — vídeo) =======================
+var RENDER_ENDPOINT = 'https://studio-giovani-video-server-production.up.railway.app/render';
 
 function overlayPngBlob(){
   return new Promise(function(resolve){
@@ -344,7 +662,22 @@ function overlayPngBlob(){
   });
 }
 
-exportBtn.addEventListener('click', async function(){
+function downloadBlob(blob, filename){
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+}
+
+function fileBaseName(){
+  return (el('localizacao').value || 'imovel').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'imovel';
+}
+
+async function exportVideo(){
   if (!videoFile) return;
   exportBtn.disabled = true;
   setProgress(null);
@@ -392,13 +725,7 @@ exportBtn.addEventListener('click', async function(){
     setStatus('Finalizando…');
     setProgress(0.95);
 
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'giovani-' + (el('localizacao').value || 'imovel').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.mp4';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    downloadBlob(blob, 'giovani-' + fileBaseName() + '.mp4');
     setProgress(1);
     setStatus('Vídeo pronto — o download deve começar sozinho.', 'ok');
     setTimeout(function(){ setProgress(null); }, 1500);
@@ -410,4 +737,51 @@ exportBtn.addEventListener('click', async function(){
   } finally {
     exportBtn.disabled = false;
   }
+}
+
+// ======================= EXPORT (local — foto) =======================
+function compositePhotoBlob(){
+  return new Promise(function(resolve, reject){
+    var W = currentW(), H = currentH();
+    var off = document.createElement('canvas');
+    off.width = W;
+    off.height = H;
+    var octx = off.getContext('2d');
+    octx.fillStyle = NAVY;
+    octx.fillRect(0, 0, W, H);
+    drawPhotoOnCtx(octx, W, H);
+    var st = readState();
+    var variantColors = variantColorsFor(st);
+    if (fotoFormat === '1:1'){
+      renderOverlaySquare(octx, W, H, st, variantColors);
+    } else {
+      renderOverlayTall(octx, W, H, st, variantColors);
+    }
+    off.toBlob(function(blob){
+      if (blob) resolve(blob); else reject(new Error('Falha ao gerar a imagem'));
+    }, 'image/jpeg', 0.92);
+  });
+}
+
+async function exportFoto(){
+  if (!photoImg) return;
+  exportBtn.disabled = true;
+  try {
+    setStatus('Gerando a imagem…');
+    var blob = await compositePhotoBlob();
+    var suffix = fotoFormat === '1:1' ? '-feed' : '-story';
+    downloadBlob(blob, 'giovani-' + fileBaseName() + suffix + '.jpg');
+    setStatus('Imagem pronta — o download deve começar sozinho.', 'ok');
+  } catch (err) {
+    console.error('[Studio Giovani] falha ao gerar imagem:', err);
+    var detail = (err && err.message) ? ' (' + err.message + ')' : '';
+    setStatus('Não deu pra gerar a imagem' + detail + '. Tenta de novo.', 'error');
+  } finally {
+    exportBtn.disabled = false;
+  }
+}
+
+exportBtn.addEventListener('click', function(){
+  if (mode === 'foto') exportFoto();
+  else exportVideo();
 });
