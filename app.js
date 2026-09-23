@@ -886,12 +886,147 @@ el('fotoInput').addEventListener('change', function(e){
     updatePhotoTransform();
     updateEmptyMsg();
     exportBtn.disabled = false;
+    resetEnhanceForNewPhoto(img, photoObjectUrl);
     setStatus('');
   };
   img.onerror = function(){
     setStatus('Não consegui abrir essa foto. Tenta outro arquivo (JPG ou PNG).', 'error');
   };
   img.src = photoObjectUrl;
+});
+
+// ---------------- Melhorar foto (IA no servidor) ----------------
+// A foto vai pro nosso servidor no Railway, que chama o Gemini com a chave
+// guardada lá (a chave nunca passa pelo navegador). Guardamos a original e
+// a melhorada pra alternar entre as duas sem gastar outra chamada.
+var ENHANCE_ENDPOINT = 'https://studio-giovani-video-server-production.up.railway.app/enhance-photo';
+var photoOriginal = null;   // {img, url}
+var photoEnhancedCache = null; // {img, url}
+var photoShowingEnhanced = false;
+var enhanceToken = 0;
+var enhanceBtn = el('fotoEnhanceBtn');
+var revertBtn = el('fotoRevertBtn');
+
+function setEnhanceBtn(label, busy){
+  enhanceBtn.innerHTML = '';
+  if (busy){
+    var s = document.createElement('span');
+    s.className = 'spin';
+    s.setAttribute('aria-hidden', 'true');
+    enhanceBtn.appendChild(s);
+  }
+  enhanceBtn.appendChild(document.createTextNode(label));
+}
+
+function resetEnhanceForNewPhoto(img, url){
+  enhanceToken++;
+  if (photoEnhancedCache) URL.revokeObjectURL(photoEnhancedCache.url);
+  photoOriginal = { img: img, url: url };
+  photoEnhancedCache = null;
+  photoShowingEnhanced = false;
+  enhanceBtn.disabled = false;
+  enhanceBtn.classList.remove('done');
+  setEnhanceBtn('Melhorar foto', false);
+  revertBtn.hidden = true;
+}
+
+function showPhotoVersion(v){
+  photoImg = v.img;
+  photoEl.src = v.url;
+  clampPhotoPan();
+  updatePhotoTransform();
+}
+
+// Prepara a original: JPEG, lado maior até 3072px (a IA devolve em 4K de
+// qualquer jeito) — isso normaliza HEIC/PNG gigante e acelera o upload.
+function originalAsJpeg(img){
+  return new Promise(function(resolve, reject){
+    var maxSide = 3072;
+    var w = img.naturalWidth, h = img.naturalHeight;
+    var k = Math.min(1, maxSide / Math.max(w, h));
+    var c = document.createElement('canvas');
+    c.width = Math.round(w * k);
+    c.height = Math.round(h * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    c.toBlob(function(b){ b ? resolve({ blob: b, w: c.width, h: c.height }) : reject(new Error('não consegui preparar a foto')); }, 'image/jpeg', 0.93);
+  });
+}
+
+function loadImageFromBlob(blob){
+  return new Promise(function(resolve, reject){
+    var url = URL.createObjectURL(blob);
+    var img = new Image();
+    img.onload = function(){ resolve({ img: img, url: url }); };
+    img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('a imagem devolvida não abriu')); };
+    img.src = url;
+  });
+}
+
+async function enhancePhoto(){
+  if (!photoOriginal) return;
+  // já temos a versão melhorada: só alterna, sem nova chamada
+  if (photoEnhancedCache && !photoShowingEnhanced){
+    showPhotoVersion(photoEnhancedCache);
+    photoShowingEnhanced = true;
+    enhanceBtn.disabled = true;
+    enhanceBtn.classList.add('done');
+    setEnhanceBtn('Foto melhorada', false);
+    revertBtn.hidden = false;
+    setStatus('Usando a foto melhorada.', 'ok');
+    return;
+  }
+  var myToken = ++enhanceToken;
+  enhanceBtn.disabled = true;
+  exportBtn.disabled = true;
+  setEnhanceBtn('Melhorando…', true);
+  setStatus('Melhorando a foto com IA. Leva uns 20 a 40 segundos.');
+  var controller = new AbortController();
+  var timer = setTimeout(function(){ controller.abort(); }, 200000);
+  try {
+    var prepared = await originalAsJpeg(photoOriginal.img);
+    var form = new FormData();
+    form.append('photo', prepared.blob, 'foto.jpg');
+    form.append('width', String(prepared.w));
+    form.append('height', String(prepared.h));
+    var res = await fetch(ENHANCE_ENDPOINT, { method: 'POST', body: form, signal: controller.signal });
+    if (!res.ok){
+      var msg = '';
+      try { msg = (await res.json()).error || ''; } catch(e){}
+      throw new Error(msg || ('servidor respondeu ' + res.status));
+    }
+    var blob = await res.blob();
+    var loaded = await loadImageFromBlob(blob);
+    if (myToken !== enhanceToken){ URL.revokeObjectURL(loaded.url); return; } // trocou de foto no meio
+    photoEnhancedCache = loaded;
+    showPhotoVersion(loaded);
+    photoShowingEnhanced = true;
+    enhanceBtn.classList.add('done');
+    setEnhanceBtn('Foto melhorada', false);
+    revertBtn.hidden = false;
+    setStatus('Foto melhorada (' + loaded.img.naturalWidth + '×' + loaded.img.naturalHeight + '). Se não gostar, volte pra original.', 'ok');
+  } catch (err) {
+    if (myToken !== enhanceToken) return;
+    console.error('[Studio Giovani] falha ao melhorar foto:', err);
+    var detail = err && err.name === 'AbortError' ? 'demorou demais' : ((err && err.message) || 'erro desconhecido');
+    enhanceBtn.disabled = false;
+    setEnhanceBtn('Melhorar foto', false);
+    setStatus('Não deu pra melhorar a foto (' + detail + '). A original continua valendo.', 'error');
+  } finally {
+    clearTimeout(timer);
+    if (myToken === enhanceToken) exportBtn.disabled = !photoImg;
+  }
+}
+
+enhanceBtn.addEventListener('click', enhancePhoto);
+revertBtn.addEventListener('click', function(){
+  if (!photoOriginal) return;
+  showPhotoVersion(photoOriginal);
+  photoShowingEnhanced = false;
+  revertBtn.hidden = true;
+  enhanceBtn.disabled = false;
+  enhanceBtn.classList.remove('done');
+  setEnhanceBtn(photoEnhancedCache ? 'Usar foto melhorada' : 'Melhorar foto', false);
+  setStatus('Voltou pra foto original.');
 });
 
 el('fotoZoom').addEventListener('input', function(){
@@ -1145,7 +1280,8 @@ async function exportFoto(){
     var blob = await compositePhotoBlob();
     var suffix = fotoFormat === '1:1' ? '-feed' : '-story';
     var styleSuffix = artStyle === 'editorial' ? '-editorial' : '';
-    downloadBlob(blob, 'giovani-' + fileBaseName() + styleSuffix + suffix + '.jpg');
+    var enhancedSuffix = photoShowingEnhanced ? '-melhorada' : '';
+    downloadBlob(blob, 'giovani-' + fileBaseName() + styleSuffix + enhancedSuffix + suffix + '.jpg');
     setStatus('Imagem pronta — o download deve começar sozinho.', 'ok');
   } catch (err) {
     console.error('[Studio Giovani] falha ao gerar imagem:', err);
