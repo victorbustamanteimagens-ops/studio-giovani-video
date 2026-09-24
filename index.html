@@ -94,6 +94,27 @@
   .ae-shots .tm{color:var(--text-muted); font-variant-numeric:tabular-nums; white-space:nowrap}
   .ae-shots .w{grid-column:2 / span 2; color:var(--text-muted); line-height:1.35}
   .ae-shots li.out{opacity:0.65}
+  .ae-shots .fala{grid-column:2 / span 2; font-style:italic; color:var(--text); line-height:1.35}
+  .ae-listen{align-self:flex-start}
+  .voice-box{display:flex; flex-direction:column; gap:8px; padding:12px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2)}
+  .voice-head{display:flex; justify-content:space-between; align-items:baseline; font-size:14px}
+  .voice-head span{font-size:12px; color:var(--text-muted)}
+  .voice-hint{margin:0; font-size:12.5px; color:var(--text-muted); line-height:1.4}
+  .voice-idle{display:flex; flex-direction:column; gap:6px; align-items:stretch}
+  .rec-btn{font:inherit; font-size:14px; font-weight:700; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px}
+  .rec-btn:hover{border-color:var(--danger)}
+  .rec-btn:focus-visible, .rec-stop:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+  .rec-dot{width:10px; height:10px; border-radius:50%; background:var(--danger); flex-shrink:0}
+  .voice-recording{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:10px; background:var(--surface); border:1.5px solid var(--danger)}
+  .rec-live{display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; font-variant-numeric:tabular-nums}
+  .rec-live .rec-dot{animation:recpulse 1s ease-in-out infinite}
+  @keyframes recpulse{50%{opacity:0.25}}
+  @media (prefers-reduced-motion: reduce){ .rec-live .rec-dot{animation:none} }
+  .rec-stop{font:inherit; font-size:13.5px; font-weight:700; padding:8px 14px; border-radius:8px; border:none; background:var(--danger); color:#fff; cursor:pointer}
+  .voice-ready{display:flex; flex-direction:column; gap:6px}
+  .voice-ready audio{width:100%; height:36px}
+  .voice-actions{display:flex; align-items:center; gap:12px; font-size:12.5px; color:var(--text-muted)}
+  .voice-actions span{flex:1; font-variant-numeric:tabular-nums}
   .tab:focus-visible{outline:2px solid var(--focus); outline-offset:1px;}
   .tab[aria-pressed="true"]{background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,0.12);}
 
@@ -175,6 +196,29 @@
         <input type="file" id="aeInput" accept="video/*" multiple>
       </label>
       <ul class="ae-files" id="aeFiles"></ul>
+
+      <div class="voice-box">
+        <div class="voice-head"><strong>Locução</strong><span>opcional</span></div>
+        <p class="voice-hint">Grave falando do imóvel, sem precisar olhar o vídeo. A IA ouve e monta os cortes no tempo da sua fala: quando você fala “cozinha”, entra a cozinha. Ideal: 20 a 60 segundos.</p>
+        <div class="voice-idle" id="voiceIdle">
+          <button type="button" class="rec-btn" id="voiceRecBtn"><span class="rec-dot" aria-hidden="true"></span>Gravar locução</button>
+          <label class="link-btn" for="voiceFile">ou enviar um áudio pronto</label>
+          <input type="file" id="voiceFile" accept="audio/*,.m4a,.ogg,.opus,.mp3,.wav" hidden>
+        </div>
+        <div class="voice-recording" id="voiceRecording" hidden>
+          <span class="rec-live"><span class="rec-dot" aria-hidden="true"></span>Gravando <span id="voiceTimer">0:00</span></span>
+          <button type="button" class="rec-stop" id="voiceStopBtn">Parar</button>
+        </div>
+        <div class="voice-ready" id="voiceReady" hidden>
+          <audio id="voicePlayer" controls preload="metadata"></audio>
+          <div class="voice-actions">
+            <span id="voiceInfo"></span>
+            <button type="button" class="link-btn" id="voiceRedoBtn">Regravar</button>
+            <button type="button" class="link-btn" id="voiceRemoveBtn">Remover</button>
+          </div>
+        </div>
+      </div>
+
       <button type="button" class="enhance-btn" id="aeRunBtn" disabled>Montar vídeo com IA</button>
       <div class="progress-row" id="aeProgressWrap"><div class="progress"><div id="aeProgressBar"></div></div></div>
       <div class="ae-status" id="aeStatus" role="status" aria-live="polite">A IA assiste tudo e escolhe o hook, a ordem, o ritmo e os melhores trechos. Leva uns 30 a 90 segundos.</div>
@@ -182,6 +226,7 @@
         <div class="ae-plan-head"><strong>Montagem</strong><span id="aeMeta"></span></div>
         <p id="aeResumo"></p>
         <div class="ae-timeline" id="aeTimeline" aria-label="Linha do tempo do vídeo montado"></div>
+        <button type="button" class="enhance-btn ae-listen" id="aeListenBtn" hidden>Ouvir a prévia com a locução</button>
         <ol class="ae-shots" id="aeShots"></ol>
         <button type="button" class="link-btn" id="aeRawBtn">Baixar montagem sem a arte</button>
       </div>
@@ -326,6 +371,6 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=6"></script>
+<script type="module" src="./app.js?v=7"></script>
 </body>
 </html>

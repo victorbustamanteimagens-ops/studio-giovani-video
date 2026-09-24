@@ -1141,6 +1141,7 @@ try {
 } catch (e) {}
 
 function applyMode(){
+  videoEl.muted = true;
   var isFoto = mode === 'foto';
   var isAE = mode === 'autoedit';
   el('videoUploadSection').hidden = mode !== 'video';
@@ -1343,7 +1344,7 @@ exportBtn.addEventListener('click', function(){
 // montar a edição (hook, ordem, ritmo, trechos) e devolve o vídeo já cortado
 // e juntado. O resultado vira o vídeo da prévia desta aba, com a arte por
 // cima — e o botão "Gerar vídeo final" queima a arte igual na aba Vídeo.
-var AUTOEDIT_ENDPOINT = 'https://studio-giovani-video-server-production.up.railway.app/autoedit/smart';
+var AUTOEDIT_ENDPOINT = window.__SG_AUTOEDIT_ENDPOINT || 'https://studio-giovani-video-server-production.up.railway.app/autoedit/smart';
 var AE_MAX = 10;
 var aeClips = [];
 var aeBusy = false;
@@ -1414,7 +1415,7 @@ function aeRenderPlan(plan){
   var tl = el('aeTimeline'); tl.innerHTML = '';
   var ol = el('aeShots'); ol.innerHTML = '';
   if (!plan){ el('aeMeta').textContent = ''; return; }
-  el('aeMeta').textContent = (plan.plano || []).length + ' cortes · ' + aeSec(plan.duracaoFinal || 0) + ' · IA ≈ US$ ' + (plan.custoUSD || 0).toFixed(3).replace('.', ',');
+  el('aeMeta').textContent = (plan.plano || []).length + ' cortes · ' + aeSec(plan.duracaoFinal || 0) + (plan.comLocucao ? ' · com locução' : '') + ' · IA ≈ US$ ' + (plan.custoUSD || 0).toFixed(3).replace('.', ',');
   (plan.plano || []).forEach(function(p, i){
     var dur = p.fim - p.inicio;
     var seg = document.createElement('div');
@@ -1427,7 +1428,13 @@ function aeRenderPlan(plan){
     var t = document.createElement('span'); t.className = 't'; t.textContent = (p.ambiente || p.nome) + (i === 0 ? ' · hook' : '');
     var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = aeSec(p.inicio) + '–' + aeSec(p.fim);
     var w = document.createElement('span'); w.className = 'w'; w.textContent = p.motivo || p.nome;
-    li.append(n, t, tm, w); ol.appendChild(li);
+    li.append(n, t, tm);
+    if (plan.comLocucao && p.fala){
+      var fl = document.createElement('span'); fl.className = 'fala'; fl.textContent = '“' + p.fala + '”';
+      li.appendChild(fl);
+    }
+    li.appendChild(w);
+    ol.appendChild(li);
   });
   (plan.fora || []).forEach(function(p){
     var li = document.createElement('li'); li.className = 'out';
@@ -1450,6 +1457,8 @@ aeRunBtn.addEventListener('click', function(){
 
   var form = new FormData();
   aeClips.forEach(function(f){ form.append('clips', f, f.name); });
+  var withVoice = !!voiceBlob;
+  if (withVoice) form.append('voice', voiceBlob, voiceName);
   var xhr = new XMLHttpRequest();
   xhr.open('POST', AUTOEDIT_ENDPOINT);
   xhr.responseType = 'blob';
@@ -1459,7 +1468,9 @@ aeRunBtn.addEventListener('click', function(){
   };
   xhr.upload.onload = function(){
     aeSetProgress(0.65);
-    aeSetStatus('A IA está assistindo os clipes e montando a edição… (~30 a 60s)');
+    aeSetStatus(withVoice
+      ? 'A IA está ouvindo a locução e montando os cortes no tempo da fala… (~30 a 90s)'
+      : 'A IA está assistindo os clipes e montando a edição… (~30 a 60s)');
   };
   function finish(){
     aeBusy = false;
@@ -1483,9 +1494,14 @@ aeRunBtn.addEventListener('click', function(){
     aeSetProgress(1);
     setTimeout(function(){ aeSetProgress(null); }, 1200);
     aeResultFile = new File([xhr.response], 'giovani-autoedit.mp4', { type: 'video/mp4' });
+    aeResultHasVoice = withVoice;
+    aeVoiceStale = false;
     if (mode === 'autoedit') loadVideoIntoPreview(aeResultFile);
     aeRenderPlan(aeDecodePlan(xhr.getResponseHeader('X-Autoedit-Plan')));
-    aeSetStatus('Vídeo montado. Confira na prévia e toque em “Gerar vídeo final” pra sair com a arte.', 'ok');
+    el('aeListenBtn').hidden = !withVoice;
+    aeSetStatus(withVoice
+      ? 'Vídeo montado no tempo da locução. Toque em “Ouvir a prévia” e depois em “Gerar vídeo final” pra sair com a arte.'
+      : 'Vídeo montado. Confira na prévia e toque em “Gerar vídeo final” pra sair com a arte.', 'ok');
   };
   xhr.onerror = function(){ finish(); aeSetProgress(null); aeSetStatus('Falha de conexão com o servidor. Confere a internet e tenta de novo.', 'error'); };
   xhr.ontimeout = function(){ finish(); aeSetProgress(null); aeSetStatus('Demorou demais. Tenta com menos clipes ou clipes mais curtos.', 'error'); };
@@ -1494,4 +1510,138 @@ aeRunBtn.addEventListener('click', function(){
 
 el('aeRawBtn').addEventListener('click', function(){
   if (aeResultFile) downloadBlob(aeResultFile, 'giovani-' + fileBaseName() + '-montagem.mp4');
+});
+
+
+// ---------------- Locução (gravar no navegador ou enviar arquivo) ----------------
+var voiceBlob = null;
+var voiceName = '';
+var voiceRecorder = null;
+var voiceStream = null;
+var voiceTimerId = null;
+var voiceStartedAt = 0;
+var voiceUrl = null;
+var aeResultHasVoice = false;
+var aeVoiceStale = false;
+var VOICE_MAX_SECONDS = 120;
+
+function voiceShow(state){
+  el('voiceIdle').hidden = state !== 'idle';
+  el('voiceRecording').hidden = state !== 'recording';
+  el('voiceReady').hidden = state !== 'ready';
+}
+function voiceFmt(sec){
+  sec = Math.max(0, Math.round(sec));
+  return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+}
+function voiceMarkChanged(){
+  // a montagem atual foi feita com outra locução (ou sem): avisa pra montar de novo
+  if (aeResultFile){
+    aeVoiceStale = true;
+    aeSetStatus('A locução mudou. Toque em “Montar vídeo com IA” de novo pra encaixar os cortes nela.');
+  }
+}
+function voiceSet(blob, name, knownSeconds){
+  voiceBlob = blob;
+  voiceName = name;
+  if (voiceUrl) URL.revokeObjectURL(voiceUrl);
+  voiceUrl = URL.createObjectURL(blob);
+  var player = el('voicePlayer');
+  player.src = voiceUrl;
+  el('voiceInfo').textContent = knownSeconds ? 'Locução de ' + voiceFmt(knownSeconds) : 'Locução pronta';
+  player.onloadedmetadata = function(){
+    if (isFinite(player.duration) && player.duration > 0){
+      el('voiceInfo').textContent = 'Locução de ' + voiceFmt(player.duration);
+    }
+  };
+  voiceShow('ready');
+  voiceMarkChanged();
+}
+function voiceClear(){
+  voiceBlob = null;
+  voiceName = '';
+  if (voiceUrl){ URL.revokeObjectURL(voiceUrl); voiceUrl = null; }
+  el('voicePlayer').removeAttribute('src');
+  voiceShow('idle');
+  voiceMarkChanged();
+}
+function voicePickMime(){
+  var opts = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm', 'audio/ogg;codecs=opus'];
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+  for (var i = 0; i < opts.length; i++){ if (MediaRecorder.isTypeSupported(opts[i])) return opts[i]; }
+  return '';
+}
+
+async function voiceStart(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder){
+    aeSetStatus('Esse navegador não grava áudio. Use o Chrome ou o Safari atualizados, ou envie um áudio pronto.', 'error');
+    return;
+  }
+  try {
+    voiceStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  } catch (err) {
+    var denied = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+    aeSetStatus(denied
+      ? 'O navegador bloqueou o microfone. Libere o microfone pra este site (no cadeado ao lado do endereço) e tente de novo.'
+      : 'Não encontrei um microfone. Confere se tem um conectado, ou envie um áudio pronto.', 'error');
+    return;
+  }
+  var mime = voicePickMime();
+  var chunks = [];
+  try {
+    voiceRecorder = mime ? new MediaRecorder(voiceStream, { mimeType: mime }) : new MediaRecorder(voiceStream);
+  } catch (e) {
+    voiceRecorder = new MediaRecorder(voiceStream);
+  }
+  voiceRecorder.ondataavailable = function(e){ if (e.data && e.data.size) chunks.push(e.data); };
+  voiceRecorder.onstop = function(){
+    clearInterval(voiceTimerId);
+    if (voiceStream){ voiceStream.getTracks().forEach(function(t){ t.stop(); }); voiceStream = null; }
+    var type = (voiceRecorder && voiceRecorder.mimeType) || mime || 'audio/webm';
+    var ext = /mp4/.test(type) ? 'm4a' : (/ogg/.test(type) ? 'ogg' : 'webm');
+    var blob = new Blob(chunks, { type: type });
+    voiceRecorder = null;
+    if (blob.size < 2000){
+      voiceShow('idle');
+      aeSetStatus('A gravação ficou vazia. Tente de novo.', 'error');
+      return;
+    }
+    voiceSet(blob, 'locucao.' + ext, (Date.now() - voiceStartedAt) / 1000);
+    aeSetStatus('Locução gravada. Ouça pra conferir e toque em “Montar vídeo com IA”.');
+  };
+  voiceRecorder.start(250);
+  voiceStartedAt = Date.now();
+  el('voiceTimer').textContent = '0:00';
+  voiceShow('recording');
+  aeSetStatus('Gravando. Fale com calma sobre o imóvel e toque em “Parar” quando terminar.');
+  voiceTimerId = setInterval(function(){
+    var sec = (Date.now() - voiceStartedAt) / 1000;
+    el('voiceTimer').textContent = voiceFmt(sec);
+    if (sec >= VOICE_MAX_SECONDS && voiceRecorder && voiceRecorder.state === 'recording') voiceRecorder.stop();
+  }, 250);
+}
+
+el('voiceRecBtn').addEventListener('click', voiceStart);
+el('voiceStopBtn').addEventListener('click', function(){
+  if (voiceRecorder && voiceRecorder.state === 'recording') voiceRecorder.stop();
+});
+el('voiceRedoBtn').addEventListener('click', function(){ voiceClear(); voiceStart(); });
+el('voiceRemoveBtn').addEventListener('click', function(){
+  voiceClear();
+  aeSetStatus(aeResultFile ? 'Locução removida. Monte de novo pra tirar a voz do vídeo.' : 'Locução removida.');
+});
+el('voiceFile').addEventListener('change', function(){
+  var f = this.files && this.files[0];
+  this.value = '';
+  if (!f) return;
+  if (f.size > 30 * 1024 * 1024){ aeSetStatus('Esse áudio passou de 30 MB. Envie um arquivo menor.', 'error'); return; }
+  voiceSet(f, f.name || 'locucao');
+  aeSetStatus('Áudio carregado. Ouça pra conferir e toque em “Montar vídeo com IA”.');
+});
+
+el('aeListenBtn').addEventListener('click', function(){
+  if (mode !== 'autoedit' || !aeResultFile) return;
+  videoEl.muted = false;
+  videoEl.currentTime = 0;
+  videoEl.play().catch(function(){});
 });
