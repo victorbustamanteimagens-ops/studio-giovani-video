@@ -70,6 +70,31 @@
 
   .tabs{display:flex; gap:8px; padding:4px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border);}
   .tab{flex:1; font:inherit; font-size:13.5px; font-weight:700; padding:10px 8px; border-radius:8px; border:none; background:transparent; color:var(--text-muted); cursor:pointer;}
+  .ae-files{list-style:none; margin:0; padding:0; font-size:12.5px; display:flex; flex-direction:column; gap:3px; color:var(--text-muted)}
+  .ae-files:empty{display:none}
+  .ae-files li{display:flex; justify-content:space-between; gap:10px; font-variant-numeric:tabular-nums}
+  .ae-files li span:first-child{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .ae-files li.total{color:var(--text); font-weight:700; border-top:1px solid var(--border); padding-top:5px; margin-top:2px}
+  .ae-files li.warn{color:var(--danger)}
+  .ae-status{font-size:12.5px; color:var(--text-muted); text-align:center; line-height:1.4}
+  .ae-status[data-state="ok"]{color:#3E7A47}
+  .ae-status[data-state="error"]{color:var(--danger)}
+  .ae-plan{display:flex; flex-direction:column; gap:10px; padding:12px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2)}
+  .ae-plan-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:14px}
+  .ae-plan-head span{font-size:12px; color:var(--text-muted); font-variant-numeric:tabular-nums; text-align:right}
+  .ae-plan p{margin:0; font-size:13px; line-height:1.45}
+  .ae-timeline{display:flex; height:26px; border-radius:6px; overflow:hidden; border:1px solid var(--border)}
+  .ae-timeline div{display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:700; background:var(--accent-bg); color:var(--accent-text); border-right:1px solid var(--surface); overflow:hidden; white-space:nowrap; font-variant-numeric:tabular-nums}
+  .ae-timeline div:nth-child(even){background:var(--accent); color:var(--surface)}
+  .ae-timeline div:first-child{background:var(--text); color:var(--surface)}
+  .ae-shots{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:8px; font-size:12.5px}
+  .ae-shots li{display:grid; grid-template-columns:22px 1fr auto; gap:2px 8px}
+  .ae-shots .n{font-weight:700; color:var(--accent); font-variant-numeric:tabular-nums}
+  .ae-shots .t{font-weight:700}
+  .ae-shots .tm{color:var(--text-muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+  .ae-shots .w{grid-column:2 / span 2; color:var(--text-muted); line-height:1.35}
+  .ae-shots li.out{opacity:0.65}
+  .tab:focus-visible{outline:2px solid var(--focus); outline-offset:1px;}
   .tab[aria-pressed="true"]{background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,0.12);}
 
   .primary-btn{font:inherit; font-size:16px; font-weight:700; padding:16px 20px; border-radius:12px; border:none; background:var(--accent-bg); color:var(--accent-text); cursor:pointer;}
@@ -128,6 +153,7 @@
       <div class="tabs" id="modeSeg" role="group" aria-label="Tipo de conteúdo">
         <button type="button" class="tab" data-mode="video" aria-pressed="true">Vídeo</button>
         <button type="button" class="tab" data-mode="foto" aria-pressed="false">Foto</button>
+        <button type="button" class="tab" data-mode="autoedit" aria-pressed="false">Auto edit</button>
       </div>
     </fieldset>
 
@@ -139,6 +165,26 @@
         <input type="file" id="videoInput" accept="video/*">
       </label>
       <div class="upload-hint">Ideal: vídeo vertical (9:16). Sai em MP4 1080×1920.</div>
+    </fieldset>
+
+    <fieldset id="autoeditSection" hidden>
+      <legend>Clipes do imóvel</legend>
+      <label class="upload" for="aeInput">
+        <strong>Toque para escolher os clipes</strong>
+        <span id="aeFilename">De 2 a 10 vídeos brutos do mesmo imóvel</span>
+        <input type="file" id="aeInput" accept="video/*" multiple>
+      </label>
+      <ul class="ae-files" id="aeFiles"></ul>
+      <button type="button" class="enhance-btn" id="aeRunBtn" disabled>Montar vídeo com IA</button>
+      <div class="progress-row" id="aeProgressWrap"><div class="progress"><div id="aeProgressBar"></div></div></div>
+      <div class="ae-status" id="aeStatus" role="status" aria-live="polite">A IA assiste tudo e escolhe o hook, a ordem, o ritmo e os melhores trechos. Leva uns 30 a 90 segundos.</div>
+      <div class="ae-plan" id="aePlan" hidden>
+        <div class="ae-plan-head"><strong>Montagem</strong><span id="aeMeta"></span></div>
+        <p id="aeResumo"></p>
+        <div class="ae-timeline" id="aeTimeline" aria-label="Linha do tempo do vídeo montado"></div>
+        <ol class="ae-shots" id="aeShots"></ol>
+        <button type="button" class="link-btn" id="aeRawBtn">Baixar montagem sem a arte</button>
+      </div>
     </fieldset>
 
     <fieldset id="fotoUploadSection" hidden>
@@ -280,6 +326,6 @@
   </div>
 </div>
 
-<script type="module" src="./app.js?v=5"></script>
+<script type="module" src="./app.js?v=6"></script>
 </body>
 </html>

@@ -774,12 +774,34 @@ var videoLoadGen = 0; // guarda contra o evento "change" disparando mais de
                        // automatizados/móveis) — sem isso, a resposta de uma
                        // chamada antiga podia "reativar" o botão de exportar
                        // mesmo com o vídeo ainda não carregado de verdade.
+// Cada aba de vídeo guarda o seu: o vídeo escolhido na aba Vídeo e o vídeo
+// montado pela IA na aba Auto edit. A prévia/exportação usa sempre videoFile,
+// que é o da aba ativa.
+var videoTabFile = null;
+var aeResultFile = null;
+
 el('videoInput').addEventListener('change', function(e){
   var file = e.target.files && e.target.files[0];
   if (!file) return;
+  videoTabFile = file;
+  el('uploadFilename').textContent = file.name;
+  loadVideoIntoPreview(file);
+});
+
+function clearVideoPreview(){
+  ++videoLoadGen;
+  videoFile = null;
+  videoEl.pause();
+  videoEl.removeAttribute('src');
+  videoEl.load();
+  if (videoObjectUrl){ URL.revokeObjectURL(videoObjectUrl); videoObjectUrl = null; }
+  exportBtn.disabled = true;
+  updateEmptyMsg();
+}
+
+function loadVideoIntoPreview(file){
   var myGen = ++videoLoadGen;
   videoFile = file;
-  el('uploadFilename').textContent = file.name;
   if (videoObjectUrl) URL.revokeObjectURL(videoObjectUrl);
   videoObjectUrl = URL.createObjectURL(file);
 
@@ -797,7 +819,7 @@ el('videoInput').addEventListener('change', function(e){
     cleanup();
     if (myGen !== videoLoadGen) return; // um upload mais novo já assumiu — ignora este resultado velho
     updateEmptyMsg();
-    exportBtn.disabled = false;
+    if (mode !== 'foto') exportBtn.disabled = false;
     setStatus('');
     videoEl.play().catch(function(){});
   }
@@ -819,7 +841,7 @@ el('videoInput').addEventListener('change', function(e){
   videoEl.load();
   videoEl.src = videoObjectUrl;
   videoEl.load();
-});
+}
 
 // ============================ modo foto ============================
 var photoImg = null;
@@ -1109,22 +1131,41 @@ document.querySelectorAll('#modeSeg button').forEach(function(btn){
   });
 });
 
+// ?modo=foto / ?modo=autoedit abre direto na aba (links antigos e favoritos)
+try {
+  var modoParam = new URLSearchParams(location.search).get('modo');
+  if (modoParam === 'foto' || modoParam === 'autoedit'){
+    var startTab = document.querySelector('#modeSeg button[data-mode="' + modoParam + '"]');
+    if (startTab) setTimeout(function(){ startTab.click(); }, 0);
+  }
+} catch (e) {}
+
 function applyMode(){
   var isFoto = mode === 'foto';
-  el('videoUploadSection').hidden = isFoto;
+  var isAE = mode === 'autoedit';
+  el('videoUploadSection').hidden = mode !== 'video';
+  el('autoeditSection').hidden = !isAE;
   el('fotoUploadSection').hidden = !isFoto;
   videoEl.style.display = isFoto ? 'none' : 'block';
   photoEl.style.display = isFoto ? 'block' : 'none';
-  pageTitle.textContent = isFoto ? 'Monte seu post' : 'Monte seu vídeo';
+  pageTitle.textContent = isFoto ? 'Monte seu post' : (isAE ? 'Auto edit do imóvel' : 'Monte seu vídeo');
   exportBtn.textContent = isFoto ? 'Gerar imagem final (JPG)' : 'Gerar vídeo final (MP4)';
   exportHint.textContent = isFoto
     ? 'Processamos aqui mesmo no navegador — é instantâneo.'
-    : 'Processamos no servidor — geralmente leva só alguns segundos.';
+    : (isAE ? 'Queima a arte por cima do vídeo montado pela IA.' : 'Processamos no servidor — geralmente leva só alguns segundos.');
   emptyMsg.innerHTML = isFoto
     ? 'Escolha a foto do imóvel ao lado<br>pra ver a prévia com a arte por cima'
-    : 'Escolha o vídeo do imóvel ao lado<br>pra ver a prévia com a arte por cima';
+    : (isAE ? 'Escolha os clipes ao lado e toque em<br>“Montar vídeo com IA”. O vídeo montado<br>aparece aqui com a arte por cima.' : 'Escolha o vídeo do imóvel ao lado<br>pra ver a prévia com a arte por cima');
   setStatus('');
   setProgress(null);
+
+  // cada aba de vídeo mostra o seu próprio vídeo na prévia
+  if (!isFoto){
+    var wanted = isAE ? aeResultFile : videoTabFile;
+    if (wanted !== videoFile){
+      if (wanted) loadVideoIntoPreview(wanted); else clearVideoPreview();
+    }
+  }
 
   if (isFoto){
     applyFormat();
@@ -1231,7 +1272,7 @@ async function exportVideo(){
     setStatus('Finalizando…');
     setProgress(0.95);
 
-    downloadBlob(blob, 'giovani-' + fileBaseName() + '.mp4');
+    downloadBlob(blob, 'giovani-' + fileBaseName() + (mode === 'autoedit' ? '-autoedit' : '') + '.mp4');
     setProgress(1);
     setStatus('Vídeo pronto — o download deve começar sozinho.', 'ok');
     setTimeout(function(){ setProgress(null); }, 1500);
@@ -1295,4 +1336,162 @@ async function exportFoto(){
 exportBtn.addEventListener('click', function(){
   if (mode === 'foto') exportFoto();
   else exportVideo();
+});
+
+// ======================= AUTO EDIT (IA no servidor) =======================
+// Sobe os clipes brutos pro servidor, que manda uma cópia leve pro Gemini
+// montar a edição (hook, ordem, ritmo, trechos) e devolve o vídeo já cortado
+// e juntado. O resultado vira o vídeo da prévia desta aba, com a arte por
+// cima — e o botão "Gerar vídeo final" queima a arte igual na aba Vídeo.
+var AUTOEDIT_ENDPOINT = 'https://studio-giovani-video-server-production.up.railway.app/autoedit/smart';
+var AE_MAX = 10;
+var aeClips = [];
+var aeBusy = false;
+var aeRunBtn = el('aeRunBtn');
+
+function aeSetStatus(text, state){
+  var s = el('aeStatus');
+  s.textContent = text;
+  s.dataset.state = state || '';
+}
+function aeSetProgress(p){
+  el('aeProgressWrap').classList.toggle('show', p != null);
+  if (p != null) el('aeProgressBar').style.width = Math.round(p * 100) + '%';
+}
+function aeMB(b){ return (b / 1048576).toFixed(1).replace('.', ',') + ' MB'; }
+function aeSec(n){ return (Math.round(n * 10) / 10).toFixed(1).replace('.', ',') + 's'; }
+function aeSetBtn(label, busy){
+  aeRunBtn.innerHTML = '';
+  if (busy){
+    var s = document.createElement('span'); s.className = 'spin'; s.setAttribute('aria-hidden', 'true');
+    aeRunBtn.appendChild(s);
+  }
+  aeRunBtn.appendChild(document.createTextNode(label));
+}
+function aeRefreshBtn(){
+  aeRunBtn.disabled = aeBusy || aeClips.length < 2 || aeClips.length > AE_MAX;
+}
+
+el('aeInput').addEventListener('change', function(){
+  aeClips = Array.from(this.files || []);
+  var ul = el('aeFiles');
+  ul.innerHTML = '';
+  var total = 0;
+  aeClips.forEach(function(f){
+    total += f.size;
+    var li = document.createElement('li');
+    var a = document.createElement('span'); a.textContent = f.name;
+    var b = document.createElement('span'); b.textContent = aeMB(f.size);
+    li.append(a, b); ul.appendChild(li);
+  });
+  if (aeClips.length){
+    var li = document.createElement('li');
+    var bad = aeClips.length < 2 || aeClips.length > AE_MAX;
+    li.className = 'total' + (bad ? ' warn' : '');
+    var a = document.createElement('span');
+    a.textContent = aeClips.length > AE_MAX ? aeClips.length + ' clipes (máximo ' + AE_MAX + ')'
+      : (aeClips.length < 2 ? 'Escolha pelo menos 2 clipes' : aeClips.length + ' clipes');
+    var b = document.createElement('span'); b.textContent = aeMB(total);
+    li.append(a, b); ul.appendChild(li);
+  }
+  el('aeFilename').textContent = aeClips.length ? 'Trocar os clipes' : 'De 2 a 10 vídeos brutos do mesmo imóvel';
+  aeRefreshBtn();
+});
+
+function aeDecodePlan(h){
+  if (!h) return null;
+  try {
+    var bin = atob(h);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch (e) { return null; }
+}
+
+function aeRenderPlan(plan){
+  el('aePlan').hidden = false;
+  el('aeResumo').textContent = (plan && plan.resumo) || '';
+  var tl = el('aeTimeline'); tl.innerHTML = '';
+  var ol = el('aeShots'); ol.innerHTML = '';
+  if (!plan){ el('aeMeta').textContent = ''; return; }
+  el('aeMeta').textContent = (plan.plano || []).length + ' cortes · ' + aeSec(plan.duracaoFinal || 0) + ' · IA ≈ US$ ' + (plan.custoUSD || 0).toFixed(3).replace('.', ',');
+  (plan.plano || []).forEach(function(p, i){
+    var dur = p.fim - p.inicio;
+    var seg = document.createElement('div');
+    seg.style.flex = String(Math.max(dur, 0.1));
+    seg.textContent = i === 0 ? 'hook' : aeSec(dur);
+    seg.title = (p.ambiente || p.nome) + ' · ' + aeSec(dur);
+    tl.appendChild(seg);
+    var li = document.createElement('li');
+    var n = document.createElement('span'); n.className = 'n'; n.textContent = String(i + 1);
+    var t = document.createElement('span'); t.className = 't'; t.textContent = (p.ambiente || p.nome) + (i === 0 ? ' · hook' : '');
+    var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = aeSec(p.inicio) + '–' + aeSec(p.fim);
+    var w = document.createElement('span'); w.className = 'w'; w.textContent = p.motivo || p.nome;
+    li.append(n, t, tm, w); ol.appendChild(li);
+  });
+  (plan.fora || []).forEach(function(p){
+    var li = document.createElement('li'); li.className = 'out';
+    var n = document.createElement('span'); n.className = 'n'; n.textContent = '–';
+    var t = document.createElement('span'); t.className = 't'; t.textContent = 'Fora: ' + (p.ambiente || p.nome);
+    var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = p.nome;
+    var w = document.createElement('span'); w.className = 'w'; w.textContent = p.motivo || '';
+    li.append(n, t, tm, w); ol.appendChild(li);
+  });
+}
+
+aeRunBtn.addEventListener('click', function(){
+  if (aeBusy || aeClips.length < 2 || aeClips.length > AE_MAX) return;
+  aeBusy = true;
+  aeRefreshBtn();
+  el('aeInput').disabled = true;
+  aeSetBtn('Montando…', true);
+  aeSetProgress(0);
+  aeSetStatus('Enviando os clipes…');
+
+  var form = new FormData();
+  aeClips.forEach(function(f){ form.append('clips', f, f.name); });
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', AUTOEDIT_ENDPOINT);
+  xhr.responseType = 'blob';
+  xhr.timeout = 12 * 60 * 1000;
+  xhr.upload.onprogress = function(e){
+    if (e.lengthComputable) aeSetProgress(0.6 * e.loaded / e.total);
+  };
+  xhr.upload.onload = function(){
+    aeSetProgress(0.65);
+    aeSetStatus('A IA está assistindo os clipes e montando a edição… (~30 a 60s)');
+  };
+  function finish(){
+    aeBusy = false;
+    el('aeInput').disabled = false;
+    aeSetBtn('Montar vídeo com IA', false);
+    aeRefreshBtn();
+  }
+  xhr.onload = function(){
+    finish();
+    if (xhr.status !== 200){
+      var r = new FileReader();
+      r.onload = function(){
+        var msg = '';
+        try { msg = JSON.parse(r.result).error || ''; } catch (e) {}
+        aeSetProgress(null);
+        aeSetStatus(msg || ('O servidor respondeu ' + xhr.status + '. Tenta de novo.'), 'error');
+      };
+      r.readAsText(xhr.response);
+      return;
+    }
+    aeSetProgress(1);
+    setTimeout(function(){ aeSetProgress(null); }, 1200);
+    aeResultFile = new File([xhr.response], 'giovani-autoedit.mp4', { type: 'video/mp4' });
+    if (mode === 'autoedit') loadVideoIntoPreview(aeResultFile);
+    aeRenderPlan(aeDecodePlan(xhr.getResponseHeader('X-Autoedit-Plan')));
+    aeSetStatus('Vídeo montado. Confira na prévia e toque em “Gerar vídeo final” pra sair com a arte.', 'ok');
+  };
+  xhr.onerror = function(){ finish(); aeSetProgress(null); aeSetStatus('Falha de conexão com o servidor. Confere a internet e tenta de novo.', 'error'); };
+  xhr.ontimeout = function(){ finish(); aeSetProgress(null); aeSetStatus('Demorou demais. Tenta com menos clipes ou clipes mais curtos.', 'error'); };
+  xhr.send(form);
+});
+
+el('aeRawBtn').addEventListener('click', function(){
+  if (aeResultFile) downloadBlob(aeResultFile, 'giovani-' + fileBaseName() + '-montagem.mp4');
 });
