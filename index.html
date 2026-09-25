@@ -8,157 +8,221 @@
 <style>
   :root{
     --bg:#F5F3EE; --surface:#FFFFFF; --surface-2:#EFEBE1;
-    --text:#1C1B18; --text-muted:#716B5E; --border:#E3DDCE;
-    --accent:#B9873A; --accent-bg:#C9A24D; --accent-text:#1C1B18;
-    --danger:#C43B2B; --focus:#0B2A4A;
+    --text:#1C1B18; --text-muted:#5C564A; --border:#D9D2C1;
+    --accent:#9A6E2A; --accent-bg:#C9A24D; --accent-text:#1C1B18;
+    --danger:#B53324; --ok:#2F6B39; --focus:#0B2A4A;
+    --shadow:0 1px 4px rgba(0,0,0,0.12);
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
       --bg:#17181A; --surface:#201F1C; --surface-2:#28261F;
-      --text:#F1EFE9; --text-muted:#A39C8C; --border:#37342B;
+      --text:#F1EFE9; --text-muted:#B7B0A0; --border:#433F34;
       --accent:#E2BC6E; --accent-bg:#D8B15C; --accent-text:#17181A;
-      --danger:#E06651; --focus:#E2BC6E;
+      --danger:#F07A66; --ok:#7CC48A; --focus:#E2BC6E;
     }
   }
   :root[data-theme="dark"]{
     --bg:#17181A; --surface:#201F1C; --surface-2:#28261F;
-    --text:#F1EFE9; --text-muted:#A39C8C; --border:#37342B;
+    --text:#F1EFE9; --text-muted:#B7B0A0; --border:#433F34;
     --accent:#E2BC6E; --accent-bg:#D8B15C; --accent-text:#17181A;
-    --danger:#E06651; --focus:#E2BC6E;
+    --danger:#F07A66; --ok:#7CC48A; --focus:#E2BC6E;
   }
   *{box-sizing:border-box}
   html,body{margin:0}
-  body{background:var(--bg); color:var(--text); font-family:'Work Sans', system-ui, sans-serif;}
+  body{background:var(--bg); color:var(--text); font-family:'Work Sans', system-ui, sans-serif; font-size:16px;}
   h1{font-family:'Fraunces', Georgia, serif; margin:0}
+  [hidden]{display:none !important;}
+  button, input, label.upload, label.link-btn{touch-action:manipulation}
 
   .app{max-width:1320px; margin:0 auto; padding:32px 20px 60px; display:flex; gap:28px; align-items:flex-start;}
-  @media (max-width:860px){ .app{flex-direction:column; padding:20px 14px 40px; gap:20px} }
+  @media (max-width:860px){ .app{flex-direction:column; padding:0 14px 24px; gap:14px; align-items:stretch} }
 
-  .panel{width:380px; flex-shrink:0; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:26px; display:flex; flex-direction:column; gap:22px;}
-  @media (max-width:860px){ .panel{width:100%; padding:18px} }
+  .panel{width:400px; flex-shrink:0; background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:26px; display:flex; flex-direction:column; gap:24px;}
+  @media (max-width:860px){ .panel{width:100%; padding:18px 16px 0} }
 
   .eyebrow{font-size:13px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted); font-weight:600;}
   .panel h1{font-size:26px; font-weight:600; line-height:1.15; margin-top:4px}
 
-  fieldset{border:0; padding:0; margin:0; display:flex; flex-direction:column; gap:10px}
-  [hidden]{display:none !important;}
-  legend{font-size:14px; font-weight:600; color:var(--text); padding:0 0 4px;}
+  fieldset{border:0; padding:0; margin:0; display:flex; flex-direction:column; gap:10px; min-width:0}
+  legend{font-size:17px; font-weight:700; color:var(--text); padding:0 0 6px;}
+  .sub-legend{font-size:16px; font-weight:700; margin-top:8px}
 
-  .field{display:flex; flex-direction:column; gap:6px}
-  .field label{font-size:13px; font-weight:600; color:var(--text-muted);}
-  .field input[type="text"]{font:inherit; font-size:16px; padding:11px 13px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
-  .field input[type="text"]:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .toggle-row{display:flex; align-items:flex-start; gap:4px; padding:6px 12px 10px 4px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2);}
+  .toggle-row .check{flex-shrink:0; width:44px; height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer;}
+  .toggle-row input[type="checkbox"]{width:22px; height:22px; accent-color:var(--accent); margin:0; cursor:pointer}
+  .toggle-row .toggle-field{flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; padding-top:10px}
+  .toggle-label{font-size:15px; font-weight:600; color:var(--text)}
+  .toggle-label .req{color:var(--danger); font-weight:700}
+  .toggle-label .opt{color:var(--text-muted); font-weight:500; font-size:14px}
+  .toggle-row input[type="text"]{font:inherit; font-size:16px; min-height:44px; padding:9px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
+  .toggle-row input[type="text"]::placeholder{color:var(--text-muted); opacity:0.75}
+  .toggle-row input[type="text"]:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .toggle-row.off{opacity:0.6}
+  .toggle-row.invalid{border-color:var(--danger); background:color-mix(in srgb, var(--danger) 8%, var(--surface-2))}
+  .field-err{font-size:14px; color:var(--danger); font-weight:600}
 
-  .toggle-row{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface-2);}
-  .toggle-row input[type="checkbox"]{width:18px; height:18px; accent-color:var(--accent); flex-shrink:0;}
-  .toggle-row .toggle-field{flex:1; display:flex; flex-direction:column; gap:4px}
-  .toggle-row .toggle-label{font-size:13px; font-weight:600;}
-  .toggle-row input[type="text"]{font:inherit; font-size:16px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%;}
-  .toggle-row.off{opacity:0.55}
-  .toggle-row.off input[type="text"]{opacity:0.6}
-
-  .upload{display:flex; flex-direction:column; align-items:center; gap:8px; padding:22px 14px; border-radius:12px; border:1.5px dashed var(--border); background:var(--surface-2); cursor:pointer; text-align:center; font-size:14px; color:var(--text-muted); font-weight:600;}
-  .upload:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
-  .upload strong{color:var(--text); font-size:15px}
-  .upload input{display:none}
-  .upload-hint{font-size:12px; color:var(--text-muted); text-align:center}
+  .upload{position:relative; display:flex; flex-direction:column; align-items:center; gap:8px; padding:22px 14px; border-radius:12px; border:1.5px dashed var(--border); background:var(--surface-2); cursor:pointer; text-align:center; font-size:15px; color:var(--text-muted); font-weight:600; min-height:44px}
+  .upload:focus-within{outline:2px solid var(--focus); outline-offset:2px}
+  .upload strong{color:var(--text); font-size:16px}
+  .upload input{position:absolute; width:1px; height:1px; opacity:0; pointer-events:none}
+  .upload .thumb{width:72px; height:auto; max-height:110px; object-fit:cover; border-radius:8px; border:1px solid var(--border)}
+  .upload-hint{font-size:14px; color:var(--text-muted); text-align:center; line-height:1.4}
 
   .swatches{display:flex; gap:10px}
-  .swatch{flex:1; font:inherit; display:flex; align-items:center; gap:8px; justify-content:center; padding:12px 10px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; font-size:14px; font-weight:600;}
-  .swatch .dot{width:14px; height:14px; border-radius:50%; flex-shrink:0}
+  .swatch{flex:1; font:inherit; display:flex; align-items:center; gap:8px; justify-content:center; min-height:48px; padding:10px; border-radius:10px; border:2px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; font-size:15px; font-weight:600;}
+  .swatch .dot{width:16px; height:16px; border-radius:50%; flex-shrink:0}
   .swatch[aria-pressed="true"]{border-color:var(--accent)}
+  .swatch:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
 
-  .tabs{display:flex; gap:8px; padding:4px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border);}
-  .tab{flex:1; font:inherit; font-size:13.5px; font-weight:700; padding:10px 8px; border-radius:8px; border:none; background:transparent; color:var(--text-muted); cursor:pointer;}
-  .ae-files{list-style:none; margin:0; padding:0; font-size:12.5px; display:flex; flex-direction:column; gap:3px; color:var(--text-muted)}
-  .ae-files:empty{display:none}
-  .ae-files li{display:flex; justify-content:space-between; gap:10px; font-variant-numeric:tabular-nums}
-  .ae-files li span:first-child{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-  .ae-files li.total{color:var(--text); font-weight:700; border-top:1px solid var(--border); padding-top:5px; margin-top:2px}
-  .ae-files li.warn{color:var(--danger)}
-  .ae-status{font-size:12.5px; color:var(--text-muted); text-align:center; line-height:1.4}
-  .ae-status[data-state="ok"]{color:#3E7A47}
+  .tabs{display:flex; gap:6px; padding:4px; background:var(--surface-2); border-radius:12px; border:1px solid var(--border);}
+  .tab{flex:1; font:inherit; font-size:15px; font-weight:700; min-height:44px; padding:8px 6px; border-radius:8px; border:none; background:transparent; color:var(--text-muted); cursor:pointer; line-height:1.15}
+  .tab:focus-visible{outline:2px solid var(--focus); outline-offset:1px;}
+  .tab[aria-pressed="true"]{background:var(--surface); color:var(--text); box-shadow:var(--shadow);}
+
+  .chips{display:grid; grid-template-columns:repeat(3, 1fr); gap:8px}
+  .chip{font:inherit; font-size:15px; font-weight:600; min-height:44px; padding:8px 6px; border-radius:10px; border:2px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer}
+  .chip[aria-pressed="true"]{border-color:var(--accent); background:var(--surface); font-weight:700}
+  .chip:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+
+  /* montagem automática */
+  .ae-thumbs{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(62px, 1fr)); gap:8px}
+  .ae-thumbs:empty{display:none}
+  .ae-thumbs li{display:flex; flex-direction:column; gap:3px; font-size:12.5px; color:var(--text-muted); font-variant-numeric:tabular-nums; min-width:0}
+  .ae-thumbs .ph{aspect-ratio:9/16; width:100%; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); object-fit:cover; display:block}
+  .ae-thumbs .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .ae-sum{font-size:15px; font-weight:700; display:flex; justify-content:space-between; gap:8px; font-variant-numeric:tabular-nums}
+  .ae-sum.warn{color:var(--danger)}
+  .ae-sum:empty{display:none}
+  .ae-status{font-size:15px; color:var(--text-muted); text-align:center; line-height:1.45}
+  .ae-status[data-state="ok"]{color:var(--ok)}
   .ae-status[data-state="error"]{color:var(--danger)}
-  .ae-plan{display:flex; flex-direction:column; gap:10px; padding:12px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2)}
-  .ae-plan-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:14px}
-  .ae-plan-head span{font-size:12px; color:var(--text-muted); font-variant-numeric:tabular-nums; text-align:right}
-  .ae-plan p{margin:0; font-size:13px; line-height:1.45}
-  .ae-timeline{display:flex; height:26px; border-radius:6px; overflow:hidden; border:1px solid var(--border)}
-  .ae-timeline div{display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:700; background:var(--accent-bg); color:var(--accent-text); border-right:1px solid var(--surface); overflow:hidden; white-space:nowrap; font-variant-numeric:tabular-nums}
-  .ae-timeline div:nth-child(even){background:var(--accent); color:var(--surface)}
+  .ae-plan{display:flex; flex-direction:column; gap:12px; padding:14px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2)}
+  .ae-plan-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:16px}
+  .ae-plan-head span{font-size:14px; color:var(--text-muted); font-variant-numeric:tabular-nums; text-align:right}
+  .ae-plan p{margin:0; font-size:15px; line-height:1.45}
+  .ae-timeline{display:flex; height:28px; border-radius:6px; overflow:hidden; border:1px solid var(--border)}
+  .ae-timeline div{display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; background:var(--accent-bg); color:var(--accent-text); border-right:1px solid var(--surface); overflow:hidden; white-space:nowrap; font-variant-numeric:tabular-nums}
+  .ae-timeline div:nth-child(even){background:#E3C98C; color:#1C1B18}
   .ae-timeline div:first-child{background:var(--text); color:var(--surface)}
-  .ae-shots{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:8px; font-size:12.5px}
-  .ae-shots li{display:grid; grid-template-columns:22px 1fr auto; gap:2px 8px}
+  .ae-shots{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:10px; font-size:14.5px}
+  .ae-shots li{display:grid; grid-template-columns:26px 1fr auto; gap:3px 8px; padding-bottom:10px; border-bottom:1px solid var(--border)}
+  .ae-shots li:last-child{border-bottom:0; padding-bottom:0}
   .ae-shots .n{font-weight:700; color:var(--accent); font-variant-numeric:tabular-nums}
   .ae-shots .t{font-weight:700}
   .ae-shots .tm{color:var(--text-muted); font-variant-numeric:tabular-nums; white-space:nowrap}
-  .ae-shots .w{grid-column:2 / span 2; color:var(--text-muted); line-height:1.35}
-  .ae-shots li.out{opacity:0.65}
-  .ae-shots .fala{grid-column:2 / span 2; font-style:italic; color:var(--text); line-height:1.35}
-  .ae-listen{align-self:flex-start}
-  .voice-box{display:flex; flex-direction:column; gap:8px; padding:12px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2)}
-  .voice-head{display:flex; justify-content:space-between; align-items:baseline; font-size:14px}
-  .voice-head span{font-size:12px; color:var(--text-muted)}
-  .voice-hint{margin:0; font-size:12.5px; color:var(--text-muted); line-height:1.4}
-  .voice-idle{display:flex; flex-direction:column; gap:6px; align-items:stretch}
-  .rec-btn{font:inherit; font-size:14px; font-weight:700; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px}
+  .ae-shots .w{grid-column:2 / span 2; color:var(--text-muted); line-height:1.4}
+  .ae-shots li.out .t, .ae-shots li.out .n{color:var(--text-muted)}
+  .ae-shots .fala{grid-column:2 / span 2; font-style:italic; color:var(--text); line-height:1.4}
+  .ae-shots .ctl{grid-column:2 / span 2; display:flex; gap:6px; flex-wrap:wrap}
+  .mini-btn{font:inherit; font-size:14px; font-weight:600; min-height:44px; min-width:44px; padding:6px 12px; border-radius:9px; border:1.5px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer}
+  .mini-btn:disabled{opacity:0.4; cursor:default}
+  .mini-btn:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+  .adjust-note{font-size:14px; color:var(--text-muted); line-height:1.4; margin:0}
+
+  .voice-box{display:flex; flex-direction:column; gap:10px; padding:14px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2)}
+  .voice-head{display:flex; justify-content:space-between; align-items:baseline; font-size:16px}
+  .voice-head span{font-size:14px; color:var(--text-muted)}
+  .voice-hint{margin:0; font-size:15px; color:var(--text-muted); line-height:1.45}
+  .voice-idle{display:flex; flex-direction:column; gap:4px; align-items:stretch}
+  .rec-btn{font:inherit; font-size:16px; font-weight:700; min-height:48px; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px}
   .rec-btn:hover{border-color:var(--danger)}
   .rec-btn:focus-visible, .rec-stop:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
-  .rec-dot{width:10px; height:10px; border-radius:50%; background:var(--danger); flex-shrink:0}
+  .rec-dot{width:11px; height:11px; border-radius:50%; background:var(--danger); flex-shrink:0}
   .voice-recording{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:10px; background:var(--surface); border:1.5px solid var(--danger)}
-  .rec-live{display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; font-variant-numeric:tabular-nums}
+  .rec-live{display:flex; align-items:center; gap:8px; font-weight:700; font-size:16px; font-variant-numeric:tabular-nums}
   .rec-live .rec-dot{animation:recpulse 1s ease-in-out infinite}
   @keyframes recpulse{50%{opacity:0.25}}
   @media (prefers-reduced-motion: reduce){ .rec-live .rec-dot{animation:none} }
-  .rec-stop{font:inherit; font-size:13.5px; font-weight:700; padding:8px 14px; border-radius:8px; border:none; background:var(--danger); color:#fff; cursor:pointer}
+  .rec-stop{font:inherit; font-size:15px; font-weight:700; min-height:44px; padding:8px 16px; border-radius:8px; border:none; background:var(--danger); color:#fff; cursor:pointer}
   .voice-ready{display:flex; flex-direction:column; gap:6px}
-  .voice-ready audio{width:100%; height:36px}
-  .voice-actions{display:flex; align-items:center; gap:12px; font-size:12.5px; color:var(--text-muted)}
+  .voice-ready audio{width:100%; height:40px}
+  .voice-actions{display:flex; align-items:center; gap:6px; font-size:15px; color:var(--text-muted)}
   .voice-actions span{flex:1; font-variant-numeric:tabular-nums}
-  .tab:focus-visible{outline:2px solid var(--focus); outline-offset:1px;}
-  .tab[aria-pressed="true"]{background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,0.12);}
 
-  .primary-btn{font:inherit; font-size:16px; font-weight:700; padding:16px 20px; border-radius:12px; border:none; background:var(--accent-bg); color:var(--accent-text); cursor:pointer;}
-  .primary-btn:disabled{opacity:0.55; cursor:default}
-  .secondary-btn{font:inherit; font-size:13.5px; font-weight:700; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer;}
-  .enhance-box{display:flex; flex-direction:column; gap:8px; padding:12px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2);}
-  .enhance-btn{font:inherit; font-size:14.5px; font-weight:700; padding:12px 14px; border-radius:10px; border:1.5px solid var(--accent); background:var(--surface); color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px;}
+  .primary-btn{font:inherit; font-size:17px; font-weight:700; min-height:54px; padding:14px 20px; border-radius:12px; border:none; background:var(--accent-bg); color:var(--accent-text); cursor:pointer; width:100%}
+  .primary-btn:disabled{opacity:0.5; cursor:default}
+  .primary-btn:focus-visible{outline:3px solid var(--focus); outline-offset:2px}
+  .secondary-btn{font:inherit; font-size:15px; font-weight:700; min-height:48px; padding:10px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer;}
+  .secondary-btn:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+  .enhance-box{display:flex; flex-direction:column; gap:8px; padding:14px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2);}
+  .enhance-btn{font:inherit; font-size:16px; font-weight:700; min-height:50px; padding:12px 14px; border-radius:10px; border:2px solid var(--accent); background:var(--surface); color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px;}
   .enhance-btn:hover:not(:disabled){background:var(--accent-bg); color:var(--accent-text);}
   .enhance-btn:disabled{opacity:0.5; cursor:default;}
   .enhance-btn:focus-visible, .link-btn:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
-  .enhance-btn .spin{width:15px; height:15px; border-radius:50%; border:2px solid currentColor; border-right-color:transparent; animation:sgspin 0.8s linear infinite;}
+  .spin{width:16px; height:16px; border-radius:50%; border:2px solid currentColor; border-right-color:transparent; animation:sgspin 0.8s linear infinite; flex-shrink:0}
   @keyframes sgspin{to{transform:rotate(360deg)}}
-  @media (prefers-reduced-motion: reduce){ .enhance-btn .spin{animation-duration:2.4s} }
-  .enhance-btn.done, .enhance-btn.done:disabled{border-color:#3E7A47; color:#3E7A47; opacity:1;}
-  .link-btn{font:inherit; font-size:13px; font-weight:600; background:none; border:none; padding:2px; color:var(--text-muted); text-decoration:underline; cursor:pointer; align-self:center;}
-  .enhance-hint{font-size:12px; color:var(--text-muted); line-height:1.4; text-align:center;}
-  .hint{font-size:12.5px; color:var(--text-muted); text-align:center; margin-top:-10px}
-  .status{font-size:13px; text-align:center; min-height:36px; color:var(--text-muted); display:flex; flex-direction:column; gap:4px; align-items:center;}
-  .status[data-state="ok"]{color:#3E7A47}
+  @media (prefers-reduced-motion: reduce){ .spin{animation-duration:2.4s} }
+  .enhance-btn.done, .enhance-btn.done:disabled{border-color:var(--ok); color:var(--ok); opacity:1;}
+  .link-btn{font:inherit; font-size:15px; font-weight:600; background:none; border:none; min-height:44px; padding:8px 6px; color:var(--text-muted); text-decoration:underline; text-underline-offset:3px; cursor:pointer; align-self:center; display:inline-flex; align-items:center}
+  .enhance-hint{font-size:14px; color:var(--text-muted); line-height:1.45; text-align:center;}
+  .hint{font-size:14px; color:var(--text-muted); text-align:center}
+  .status{font-size:15px; text-align:center; color:var(--text-muted); line-height:1.4}
+  .status:empty{display:none}
+  .status[data-state="ok"]{color:var(--ok)}
   .status[data-state="error"]{color:var(--danger)}
   .progress-row{display:none; align-items:center; gap:10px;}
   .progress-row.show{display:flex}
-  .progress{flex:1; height:8px; border-radius:4px; background:var(--surface-2); overflow:hidden;}
-  .progress > div{height:100%; width:0%; background:var(--accent-bg); transition:width .2s}
-  .progress-label{font-size:13px; font-weight:700; color:var(--text); min-width:38px; text-align:right; font-variant-numeric:tabular-nums;}
+  .progress{flex:1; height:10px; border-radius:5px; background:var(--surface-2); border:1px solid var(--border); overflow:hidden;}
+  .progress > div{height:100%; width:0%; background:var(--accent-bg); transition:width .3s}
+  .progress-label{font-size:15px; font-weight:700; color:var(--text); min-width:44px; text-align:right; font-variant-numeric:tabular-nums;}
 
-  .zoom-row{display:flex; align-items:center; gap:10px;}
-  .zoom-row input[type="range"]{flex:1; accent-color:var(--accent);}
-  .zoom-row .zoom-label{font-size:13px; font-weight:700; min-width:38px; text-align:right; font-variant-numeric:tabular-nums;}
-  .reposition-hint{font-size:12px; color:var(--text-muted); text-align:center;}
+  .zoom-row{display:flex; align-items:center; gap:10px; min-height:44px}
+  .zoom-row input[type="range"]{flex:1; accent-color:var(--accent); height:32px}
+  .zoom-row .zoom-label{font-size:15px; font-weight:700; min-width:44px; text-align:right; font-variant-numeric:tabular-nums;}
+  .reposition-hint{font-size:14px; color:var(--text-muted); text-align:center;}
 
-  .preview-wrap{flex:1; display:flex; flex-direction:column; align-items:center; gap:16px; min-width:0;}
+  /* barra de gerar: fica presa embaixo no celular */
+  .download-panel{display:flex; flex-direction:column; gap:10px; width:100%}
+  @media (max-width:860px){
+    .download-panel{position:sticky; bottom:0; z-index:6; margin:0 -16px; width:auto; padding:12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background:var(--surface); border-top:1px solid var(--border); box-shadow:0 -6px 18px rgba(0,0,0,0.08); border-radius:0 0 18px 18px}
+    .download-panel .hint{display:none}
+  }
+
+  .draft-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:10px 12px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border); font-size:15px; line-height:1.4}
+  .draft-bar span{flex:1; min-width:180px}
+
+  /* prévia */
+  .preview-wrap{flex:1; display:flex; flex-direction:column; align-items:center; gap:14px; min-width:0; position:sticky; top:20px}
   .stage-shell{width:100%; display:flex; justify-content:center; padding:28px; background:var(--surface-2); border-radius:20px; border:1px solid var(--border);}
-  @media (max-width:860px){ .stage-shell{padding:14px} }
-  .stage{position:relative; width:min(400px, 100%); aspect-ratio:1080/1920; border-radius:10px; overflow:hidden; box-shadow:0 18px 44px rgba(0,0,0,0.22); background:#0B2A4A; touch-action:none;}
+  .stage{position:relative; width:min(400px, 100%); aspect-ratio:1080/1920; border-radius:10px; overflow:hidden; box-shadow:0 18px 44px rgba(0,0,0,0.22); background:#0B2A4A; touch-action:none; max-width:100%}
   .stage video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block;}
   .stage img#previewPhoto{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:none; user-select:none; -webkit-user-drag:none; cursor:grab;}
   .stage img#previewPhoto.dragging{cursor:grabbing;}
   .stage canvas{position:absolute; inset:0; width:100%; height:100%; display:block; pointer-events:none;}
-  .stage .empty-msg{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:rgba(159,178,198,0.85); font-size:14px; font-weight:500; padding:30px; pointer-events:none;}
-  .preview-wrap .caption{font-size:13px; color:var(--text-muted); text-align:center}
+  .stage .empty-msg{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:rgba(214,224,235,0.92); font-size:15px; font-weight:500; padding:24px; pointer-events:none; line-height:1.45}
+  .preview-wrap .caption{font-size:14px; color:var(--text-muted); text-align:center}
+  .preview-bar{display:none}
+  @media (max-width:860px){
+    .preview-wrap{order:-1; position:sticky; top:0; z-index:7; margin:0 -14px; padding:8px 14px 8px; gap:6px; background:var(--bg); border-bottom:1px solid var(--border); padding-top:calc(8px + env(safe-area-inset-top, 0px)); top:0}
+    .stage-shell{padding:6px; border-radius:14px}
+    .stage{width:auto; height:31vh; max-height:320px}
+    .stage-shell.square .stage{height:26vh}
+    .stage .empty-msg{font-size:13px; padding:12px}
+    .preview-wrap .caption{display:none}
+    .preview-bar{display:flex; width:100%; justify-content:space-between; align-items:center; gap:8px}
+    .preview-bar strong{font-size:15px}
+    .preview-wrap.collapsed .stage-shell{display:none}
+  }
 
-  .download-panel{display:flex; flex-direction:column; gap:12px; width:100%}
+  /* folhas: conferência e pronto */
+  dialog.sheet{border:0; padding:0; width:min(520px, calc(100% - 24px)); max-height:calc(100% - 24px); border-radius:18px; background:var(--surface); color:var(--text); box-shadow:0 24px 60px rgba(0,0,0,0.35)}
+  dialog.sheet::backdrop{background:rgba(10,12,16,0.55)}
+  @media (max-width:560px){
+    dialog.sheet{width:100%; max-width:100%; margin:auto 0 0; border-radius:18px 18px 0 0; max-height:92%}
+  }
+  .sheet-inner{display:flex; flex-direction:column; gap:14px; padding:22px 20px calc(20px + env(safe-area-inset-bottom, 0px))}
+  .sheet h2{font-family:'Fraunces', Georgia, serif; font-size:24px; font-weight:600; margin:0}
+  .sheet p{margin:0; font-size:15px; line-height:1.45; color:var(--text-muted)}
+  .check-list{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; border:1px solid var(--border); border-radius:12px; overflow:hidden}
+  .check-list li{display:flex; justify-content:space-between; gap:12px; padding:11px 14px; font-size:16px; border-bottom:1px solid var(--border)}
+  .check-list li:last-child{border-bottom:0}
+  .check-list li span:first-child{color:var(--text-muted); font-size:15px}
+  .check-list li strong{text-align:right; overflow-wrap:anywhere}
+  .check-list li.missing strong{color:var(--danger)}
+  .sheet-actions{display:flex; flex-direction:column; gap:10px}
+  .result-media{display:flex; justify-content:center; background:var(--surface-2); border-radius:12px; padding:10px}
+  .result-media video, .result-media img{max-height:48vh; max-width:100%; border-radius:8px; display:block}
+  .result-media video{aspect-ratio:9/16; height:48vh; width:auto; background:#0B2A4A}
 </style>
 </head>
 <body>
@@ -166,7 +230,12 @@
   <aside class="panel">
     <div>
       <div class="eyebrow">Studio Giovani</div>
-      <h1 id="pageTitle">Monte seu conteúdo</h1>
+      <h1 id="pageTitle">Monte seu vídeo</h1>
+    </div>
+
+    <div class="draft-bar" id="draftBar" hidden>
+      <span id="draftMsg">Recuperamos o que você estava fazendo.</span>
+      <button type="button" class="link-btn" id="draftDiscardBtn">Começar do zero</button>
     </div>
 
     <fieldset>
@@ -174,28 +243,30 @@
       <div class="tabs" id="modeSeg" role="group" aria-label="Tipo de conteúdo">
         <button type="button" class="tab" data-mode="video" aria-pressed="true">Vídeo</button>
         <button type="button" class="tab" data-mode="foto" aria-pressed="false">Foto</button>
-        <button type="button" class="tab" data-mode="autoedit" aria-pressed="false">Auto edit</button>
+        <button type="button" class="tab" data-mode="autoedit" aria-pressed="false">Montagem automática</button>
       </div>
     </fieldset>
 
     <fieldset id="videoUploadSection">
       <legend>Vídeo do imóvel</legend>
       <label class="upload" for="videoInput" id="uploadLabel">
-        <strong>Toque para escolher o vídeo</strong>
+        <img class="thumb" id="videoThumb" alt="" hidden>
+        <strong id="videoPickTitle">Toque para escolher o vídeo</strong>
         <span id="uploadFilename">Nenhum vídeo escolhido ainda</span>
         <input type="file" id="videoInput" accept="video/*">
       </label>
-      <div class="upload-hint">Ideal: vídeo vertical (9:16). Sai em MP4 1080×1920.</div>
+      <div class="upload-hint">Melhor com vídeo em pé (vertical), do jeito que você grava no celular.</div>
     </fieldset>
 
     <fieldset id="autoeditSection" hidden>
-      <legend>Clipes do imóvel</legend>
+      <legend>Vídeos do imóvel</legend>
       <label class="upload" for="aeInput">
-        <strong>Toque para escolher os clipes</strong>
-        <span id="aeFilename">De 2 a 10 vídeos brutos do mesmo imóvel</span>
+        <strong id="aePickTitle">Toque para escolher os vídeos</strong>
+        <span id="aeFilename">De 2 a 10 vídeos do mesmo imóvel, do jeito que saíram do celular</span>
         <input type="file" id="aeInput" accept="video/*" multiple>
       </label>
-      <ul class="ae-files" id="aeFiles"></ul>
+      <ul class="ae-thumbs" id="aeThumbs" aria-label="Vídeos escolhidos"></ul>
+      <div class="ae-sum" id="aeSum"></div>
 
       <div class="voice-box">
         <div class="voice-head"><strong>Locução</strong><span>opcional</span></div>
@@ -221,33 +292,35 @@
 
       <button type="button" class="enhance-btn" id="aeRunBtn" disabled>Montar vídeo com IA</button>
       <div class="progress-row" id="aeProgressWrap"><div class="progress"><div id="aeProgressBar"></div></div></div>
-      <div class="ae-status" id="aeStatus" role="status" aria-live="polite">A IA assiste tudo e escolhe o hook, a ordem, o ritmo e os melhores trechos. Leva uns 30 a 90 segundos.</div>
+      <div class="ae-status" id="aeStatus" role="status" aria-live="polite">A IA assiste tudo e escolhe a cena de abertura, a ordem, o ritmo e os melhores trechos. Leva uns 30 a 90 segundos.</div>
       <div class="ae-plan" id="aePlan" hidden>
-        <div class="ae-plan-head"><strong>Montagem</strong><span id="aeMeta"></span></div>
+        <div class="ae-plan-head"><strong>Como ficou a montagem</strong><span id="aeMeta"></span></div>
         <p id="aeResumo"></p>
         <div class="ae-timeline" id="aeTimeline" aria-label="Linha do tempo do vídeo montado"></div>
-        <button type="button" class="enhance-btn ae-listen" id="aeListenBtn" hidden>Ouvir a prévia com a locução</button>
+        <button type="button" class="enhance-btn" id="aeListenBtn" hidden>Ouvir a prévia com a locução</button>
+        <p class="adjust-note">Não gostou de alguma cena? Mude a ordem, tire ou recoloque e toque em “Refazer com meus ajustes”.</p>
         <ol class="ae-shots" id="aeShots"></ol>
-        <button type="button" class="link-btn" id="aeRawBtn">Baixar montagem sem a arte</button>
+        <button type="button" class="secondary-btn" id="aeRemontarBtn" hidden>Refazer com meus ajustes</button>
+        <button type="button" class="link-btn" id="aeRawBtn">Baixar a montagem sem a arte</button>
       </div>
     </fieldset>
 
     <fieldset id="fotoUploadSection" hidden>
       <legend>Formato</legend>
       <div class="tabs" id="formatSeg" role="group" aria-label="Formato da foto">
-        <button type="button" class="tab" data-format="9:16" aria-pressed="true">Story / Reels (9:16)</button>
-        <button type="button" class="tab" data-format="1:1" aria-pressed="false">Feed (1:1)</button>
+        <button type="button" class="tab" data-format="9:16" aria-pressed="true">Story / Reels<br><small>em pé</small></button>
+        <button type="button" class="tab" data-format="1:1" aria-pressed="false">Feed<br><small>quadrado</small></button>
       </div>
 
-      <legend style="margin-top:6px">Estilo da arte</legend>
+      <div class="sub-legend">Estilo da arte</div>
       <div class="tabs" id="styleSeg" role="group" aria-label="Estilo da arte">
         <button type="button" class="tab" data-style="classic" aria-pressed="true">Clássico</button>
         <button type="button" class="tab" data-style="editorial" aria-pressed="false">Editorial</button>
       </div>
 
-      <legend style="margin-top:6px">Foto do imóvel</legend>
+      <div class="sub-legend">Foto do imóvel</div>
       <label class="upload" for="fotoInput" id="fotoUploadLabel">
-        <strong>Toque para escolher a foto</strong>
+        <strong id="fotoPickTitle">Toque para escolher a foto</strong>
         <span id="fotoFilename">Nenhuma foto escolhida ainda</span>
         <input type="file" id="fotoInput" accept="image/*">
       </label>
@@ -255,82 +328,90 @@
       <div class="enhance-box">
         <button type="button" class="enhance-btn" id="fotoEnhanceBtn" disabled>Melhorar foto</button>
         <button type="button" class="link-btn" id="fotoRevertBtn" hidden>Voltar pra foto original</button>
-        <div class="enhance-hint" id="fotoEnhanceHint">IA deixa a foto mais nítida, com luz cinematográfica e cor tratada, sem mexer em móveis nem na estrutura. Leva uns 30 segundos.</div>
+        <div class="enhance-hint" id="fotoEnhanceHint">A IA deixa a foto mais nítida, com luz de cinema e cor tratada, sem mexer em móveis nem na estrutura. Leva uns 30 segundos.</div>
       </div>
 
       <div class="zoom-row">
         <span class="toggle-label">Zoom</span>
-        <input type="range" id="fotoZoom" min="1" max="3" step="0.05" value="1">
+        <input type="range" id="fotoZoom" min="1" max="3" step="0.05" value="1" aria-label="Zoom da foto">
         <span class="zoom-label" id="fotoZoomLabel">1.0x</span>
       </div>
       <button type="button" class="secondary-btn" id="fotoCenterBtn">Centralizar foto</button>
-      <div class="reposition-hint">Arraste a foto na prévia ao lado pra reposicionar</div>
+      <div class="reposition-hint">Arraste a foto na prévia pra reposicionar</div>
     </fieldset>
 
     <fieldset>
-      <legend>Localização</legend>
+      <legend>Tipo de anúncio</legend>
+      <div class="chips" id="anuncioSeg" role="group" aria-label="Tipo de anúncio">
+        <button type="button" class="chip" data-anuncio="venda" aria-pressed="true">Venda</button>
+        <button type="button" class="chip" data-anuncio="aluguel" aria-pressed="false">Aluguel</button>
+        <button type="button" class="chip" data-anuncio="vendido" aria-pressed="false">Vendido</button>
+        <button type="button" class="chip" data-anuncio="comercial" aria-pressed="false">Comercial</button>
+        <button type="button" class="chip" data-anuncio="rural" aria-pressed="false">Rural</button>
+        <button type="button" class="chip" data-anuncio="temporada" aria-pressed="false">Temporada</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Dados do imóvel</legend>
       <div class="toggle-row" data-toggle-row="localizacao">
-        <input type="checkbox" id="tg_localizacao" checked>
+        <label class="check" for="tg_localizacao"><input type="checkbox" id="tg_localizacao" checked aria-label="Mostrar bairro na arte"></label>
         <div class="toggle-field">
-          <span class="toggle-label">Bairro, cidade</span>
-          <input type="text" id="localizacao" value="Icaraí, Niterói">
+          <label class="toggle-label" for="localizacao">Bairro, cidade <span class="req">*</span></label>
+          <input type="text" id="localizacao" placeholder="Ex.: Icaraí, Niterói" autocomplete="off">
         </div>
       </div>
       <div class="toggle-row" data-toggle-row="tipo">
-        <input type="checkbox" id="tg_tipo" checked>
+        <label class="check" for="tg_tipo"><input type="checkbox" id="tg_tipo" checked aria-label="Mostrar tipo do imóvel na arte"></label>
         <div class="toggle-field">
-          <span class="toggle-label">Tipo do imóvel (usado no estilo Editorial)</span>
-          <input type="text" id="tipo" value="Apartamento">
+          <label class="toggle-label" for="tipo">Tipo do imóvel</label>
+          <input type="text" id="tipo" placeholder="Ex.: Apartamento" autocomplete="off">
         </div>
       </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>Status</legend>
       <div class="toggle-row" data-toggle-row="status">
-        <input type="checkbox" id="tg_status" checked>
+        <label class="check" for="tg_status"><input type="checkbox" id="tg_status" checked aria-label="Mostrar etiqueta na arte"></label>
         <div class="toggle-field">
-          <span class="toggle-label">Tag (À VENDA / VENDIDO / ALUGA-SE)</span>
-          <input type="text" id="status" value="À VENDA">
+          <label class="toggle-label" for="status">Etiqueta</label>
+          <input type="text" id="status" value="À VENDA" placeholder="Ex.: À VENDA" autocomplete="off">
         </div>
       </div>
       <div class="toggle-row" data-toggle-row="valor">
-        <input type="checkbox" id="tg_valor" checked>
+        <label class="check" for="tg_valor"><input type="checkbox" id="tg_valor" checked aria-label="Mostrar valor na arte"></label>
         <div class="toggle-field">
-          <span class="toggle-label">Valor</span>
-          <input type="text" id="valor" value="R$ 780.000">
+          <label class="toggle-label" for="valor">Valor <span class="req" id="valorReq">*</span></label>
+          <input type="text" id="valor" placeholder="Ex.: R$ 780.000" inputmode="text" autocomplete="off">
         </div>
       </div>
     </fieldset>
 
     <fieldset>
-      <legend>O que valoriza o imóvel</legend>
+      <legend>O que valoriza o imóvel <span class="toggle-label opt">(opcional)</span></legend>
       <div class="toggle-row" data-toggle-row="area">
-        <input type="checkbox" id="tg_area" checked>
+        <label class="check" for="tg_area"><input type="checkbox" id="tg_area" checked aria-label="Mostrar área na arte"></label>
         <div class="toggle-field">
-          <span class="toggle-label">Área</span>
-          <input type="text" id="area" value="98 m²">
+          <label class="toggle-label" for="area">Área</label>
+          <input type="text" id="area" placeholder="Ex.: 98 m²" autocomplete="off">
         </div>
       </div>
       <div class="toggle-row" data-toggle-row="quartos">
-        <input type="checkbox" id="tg_quartos" checked>
+        <label class="check" for="tg_quartos"><input type="checkbox" id="tg_quartos" checked aria-label="Mostrar quartos na arte"></label>
         <div class="toggle-field">
-          <span class="toggle-label">Quartos</span>
-          <input type="text" id="quartos" value="3 quartos">
+          <label class="toggle-label" for="quartos" id="quartosLabel">Quartos</label>
+          <input type="text" id="quartos" placeholder="Ex.: 3 quartos" autocomplete="off">
         </div>
       </div>
       <div class="toggle-row" data-toggle-row="vagas">
-        <input type="checkbox" id="tg_vagas" checked>
+        <label class="check" for="tg_vagas"><input type="checkbox" id="tg_vagas" checked aria-label="Mostrar vagas na arte"></label>
         <div class="toggle-field">
-          <span class="toggle-label">Vagas</span>
-          <input type="text" id="vagas" value="1 vaga na escritura">
+          <label class="toggle-label" for="vagas">Vagas</label>
+          <input type="text" id="vagas" placeholder="Ex.: 1 vaga na escritura" autocomplete="off">
         </div>
       </div>
       <div class="toggle-row" data-toggle-row="destaque">
-        <input type="checkbox" id="tg_destaque" checked>
+        <label class="check" for="tg_destaque"><input type="checkbox" id="tg_destaque" checked aria-label="Mostrar diferencial na arte"></label>
         <div class="toggle-field">
-          <span class="toggle-label">Diferencial</span>
-          <input type="text" id="destaque" value="Vista para a baía">
+          <label class="toggle-label" for="destaque">Diferencial</label>
+          <input type="text" id="destaque" placeholder="Ex.: Vista para a baía" autocomplete="off">
         </div>
       </div>
     </fieldset>
@@ -348,29 +429,59 @@
     </fieldset>
 
     <div class="download-panel">
-      <button type="button" class="primary-btn" id="exportBtn" disabled>Gerar vídeo final (MP4)</button>
-      <div class="hint" id="exportHint">Processamos no servidor — geralmente leva só alguns segundos.</div>
       <div class="progress-row" id="progressWrap">
         <div class="progress"><div id="progressBar"></div></div>
         <span class="progress-label" id="progressLabel" hidden>0%</span>
       </div>
       <div class="status" id="statusMsg" role="status" aria-live="polite"></div>
+      <button type="button" class="primary-btn" id="exportBtn" disabled>Gerar vídeo final</button>
+      <div class="hint" id="exportHint">Processamos no servidor. Geralmente leva só alguns segundos.</div>
     </div>
   </aside>
 
-  <div class="preview-wrap">
-    <div class="stage-shell">
+  <div class="preview-wrap" id="previewWrap">
+    <div class="preview-bar">
+      <strong>Prévia</strong>
+      <button type="button" class="link-btn" id="previewToggleBtn" aria-expanded="true" aria-controls="stageShell">Esconder prévia</button>
+    </div>
+    <div class="stage-shell" id="stageShell">
       <div class="stage" id="stage">
         <video id="previewVideo" muted playsinline loop></video>
         <img id="previewPhoto" alt="">
         <canvas id="cv" width="1080" height="1920"></canvas>
-        <div class="empty-msg" id="emptyMsg">Escolha o vídeo do imóvel ao lado<br>pra ver a prévia com a arte por cima</div>
+        <div class="empty-msg" id="emptyMsg">Escolha o vídeo do imóvel pra ver a prévia com a arte por cima</div>
       </div>
     </div>
-    <div class="caption" id="stageCaption">É assim que fica no Reels/Stories. Ajuste ao lado e a prévia atualiza sozinha.</div>
+    <div class="caption" id="stageCaption">É assim que fica no Reels/Stories. Mude os dados e a prévia atualiza sozinha.</div>
   </div>
 </div>
 
-<script type="module" src="./app.js?v=7"></script>
+<dialog class="sheet" id="checkSheet" aria-labelledby="checkTitle">
+  <div class="sheet-inner">
+    <h2 id="checkTitle">Confira os dados</h2>
+    <p>É isso que vai aparecer na arte. Confira antes de gerar.</p>
+    <ul class="check-list" id="checkList"></ul>
+    <div class="sheet-actions">
+      <button type="button" class="primary-btn" id="checkOkBtn">Está certo, gerar</button>
+      <button type="button" class="secondary-btn" id="checkFixBtn">Corrigir</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="doneSheet" aria-labelledby="doneTitle">
+  <div class="sheet-inner">
+    <h2 id="doneTitle">Pronto!</h2>
+    <div class="result-media" id="doneMedia"></div>
+    <p id="doneHint">Mande direto pro WhatsApp ou Instagram, ou salve no celular.</p>
+    <div class="sheet-actions">
+      <button type="button" class="primary-btn" id="doneShareBtn">Enviar pelo WhatsApp / Instagram</button>
+      <button type="button" class="secondary-btn" id="doneSaveBtn">Salvar no celular</button>
+      <button type="button" class="link-btn" id="doneCloseBtn">Fechar e fazer outro</button>
+    </div>
+    <div class="status" id="doneStatus" role="status" aria-live="polite"></div>
+  </div>
+</dialog>
+
+<script type="module" src="./app.js?v=8"></script>
 </body>
 </html>

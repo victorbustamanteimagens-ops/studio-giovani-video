@@ -20,6 +20,8 @@ var CAR_PATH = new Path2D('M5 17h14M5 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm14 0a2 2 0
 var AREA_PATH = new Path2D('M4 14h16v6H4zM4 14l3-6h10l3 6');
 var STAR_PATH = new Path2D('M12 2.5L14.1 9.6L21.5 12L14.1 14.4L12 21.5L9.9 14.4L2.5 12L9.9 9.6Z');
 
+var SERVER = window.__SG_SERVER || 'https://studio-giovani-video-server-production.up.railway.app';
+
 var remaxIcon = new Image();
 var remaxIconReady = false;
 remaxIcon.onload = function(){ remaxIconReady = true; render(); };
@@ -61,13 +63,59 @@ function setProgress(pct){
   }
 }
 
+// ---------------- tipo de anúncio ----------------
+// Cada tipo preenche a etiqueta e troca os exemplos dos campos. O valor de
+// aluguel/temporada ganha o "/mês" ou "/diária" sozinho se o corretor não pôs.
+var ANUNCIOS = {
+  venda:     { tag: 'À VENDA',  valorPh: 'Ex.: R$ 780.000',      tipoPh: 'Ex.: Apartamento',     areaPh: 'Ex.: 98 m²',        quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos', valorReq: true },
+  aluguel:   { tag: 'ALUGA-SE', valorPh: 'Ex.: R$ 3.500',        tipoPh: 'Ex.: Apartamento',     areaPh: 'Ex.: 98 m²',        quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos', valorReq: true, sufixo: '/mês' },
+  vendido:   { tag: 'VENDIDO',  valorPh: 'Opcional',             tipoPh: 'Ex.: Apartamento',     areaPh: 'Ex.: 98 m²',        quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos', valorReq: false },
+  comercial: { tag: 'À VENDA',  valorPh: 'Ex.: R$ 450.000',      tipoPh: 'Ex.: Sala comercial',  areaPh: 'Ex.: 42 m²',        quartosLabel: 'Salas / ambientes', quartosPh: 'Ex.: 2 salas + copa', valorReq: true },
+  rural:     { tag: 'À VENDA',  valorPh: 'Ex.: R$ 1.200.000',    tipoPh: 'Ex.: Sítio',           areaPh: 'Ex.: 2 hectares',   quartosLabel: 'Quartos', quartosPh: 'Ex.: casa com 3 quartos', valorReq: true },
+  temporada: { tag: 'TEMPORADA', valorPh: 'Ex.: R$ 450',         tipoPh: 'Ex.: Casa de praia',   areaPh: 'Ex.: 120 m²',       quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos, até 8 pessoas', valorReq: true, sufixo: '/diária' }
+};
+var anuncio = 'venda';
+function anuncioCfg(){ return ANUNCIOS[anuncio] || ANUNCIOS.venda; }
+function valorComSufixo(v){
+  var suf = anuncioCfg().sufixo;
+  if (!v || !suf) return v;
+  if (/\/|por m[eê]s|mensal|di[aá]ria|noite/i.test(v)) return v;
+  return v + suf;
+}
+function applyAnuncio(key, fromUser){
+  if (!ANUNCIOS[key]) key = 'venda';
+  anuncio = key;
+  var c = ANUNCIOS[key];
+  document.querySelectorAll('#anuncioSeg button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-anuncio') === key)); });
+  if (fromUser){
+    el('status').value = c.tag;
+    el('tg_status').checked = true;
+    el('tg_valor').checked = key !== 'vendido' || !!el('valor').value.trim();
+    syncToggleRows();
+  }
+  el('valor').placeholder = c.valorPh;
+  el('tipo').placeholder = c.tipoPh;
+  el('area').placeholder = c.areaPh;
+  el('quartos').placeholder = c.quartosPh;
+  el('quartosLabel').textContent = c.quartosLabel;
+  el('valorReq').hidden = !c.valorReq;
+  clearInvalid();
+  render();
+}
+function syncToggleRows(){
+  FIELD_KEYS.forEach(function(key){
+    document.querySelector('[data-toggle-row="' + key + '"]').classList.toggle('off', !el('tg_' + key).checked);
+  });
+}
+var FIELD_KEYS = ['localizacao','tipo','status','valor','area','quartos','vagas','destaque'];
+
 function readState(){
   return {
     variant: document.querySelector('#variantSeg button[aria-pressed="true"]').getAttribute('data-variant'),
     localizacao: { on: el('tg_localizacao').checked, value: el('localizacao').value.trim() },
     tipo:        { on: el('tg_tipo').checked, value: el('tipo').value.trim() },
     status:      { on: el('tg_status').checked, value: el('status').value.trim() },
-    valor:       { on: el('tg_valor').checked, value: el('valor').value.trim() },
+    valor:       { on: el('tg_valor').checked, value: valorComSufixo(el('valor').value.trim()) },
     area:        { on: el('tg_area').checked, value: el('area').value.trim() },
     quartos:     { on: el('tg_quartos').checked, value: el('quartos').value.trim() },
     vagas:       { on: el('tg_vagas').checked, value: el('vagas').value.trim() },
@@ -319,19 +367,19 @@ function renderOverlayTall(ctx, W, H, st, variantColors){
     rowY += rowH + rowGap;
   }
 
-  var footerY = H - 70;
+  var footerY = H - 78;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.7)';
   ctx.shadowBlur = 10;
   ctx.shadowOffsetY = 2;
   ctx.fillStyle = CREAM;
-  ctx.font = '600 34px "Fraunces"';
+  ctx.font = '600 44px "Fraunces"';
   ctx.textAlign = 'left';
-  ctx.fillText('Giovani Oliveira', 64, footerY);
-  ctx.font = '400 22px "Work Sans"';
+  ctx.fillText('Giovani Oliveira', 64, footerY - 6);
+  ctx.font = '500 27px "Work Sans"';
   trySetLetterSpacing(ctx, 1.5);
   ctx.fillStyle = 'rgba(244,240,230,0.85)';
-  ctx.fillText('RE/MAX AXXIA IMÓVEIS · CRECI 110.031', 64, footerY + 34);
+  ctx.fillText('RE/MAX AXXIA IMÓVEIS · CRECI 110.031', 64, footerY + 36);
   trySetLetterSpacing(ctx, 0);
   ctx.restore();
 }
@@ -416,21 +464,28 @@ function renderOverlaySquare(ctx, W, H, st, variantColors){
     rowY += rowH + rowGap;
   }
 
-  var footerY = H - 34;
+  var footerY = H - 40;
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.7)';
   ctx.shadowBlur = 10;
   ctx.shadowOffsetY = 2;
   ctx.fillStyle = CREAM;
-  ctx.font = '600 26px "Fraunces"';
+  ctx.font = '600 33px "Fraunces"';
   ctx.textAlign = 'left';
-  ctx.fillText('Giovani Oliveira', x, footerY);
-  ctx.font = '400 17px "Work Sans"';
+  ctx.fillText('Giovani Oliveira', x, footerY - 4);
+  ctx.font = '500 21px "Work Sans"';
   trySetLetterSpacing(ctx, 1.2);
-  ctx.fillStyle = 'rgba(244,240,230,0.85)';
-  ctx.fillText('RE/MAX AXXIA IMÓVEIS · CRECI 110.031', x, footerY + 22);
+  ctx.fillStyle = 'rgba(244,240,230,0.9)';
+  ctx.fillText('RE/MAX AXXIA IMÓVEIS · CRECI 110.031', x, footerY + 24);
   trySetLetterSpacing(ctx, 0);
   ctx.restore();
+}
+
+// etiqueta do estilo Editorial: a tag do anúncio (À VENDA, VENDIDO…); sem
+// tag, volta pra faixa da agência
+function editorialTag(st){
+  if (st.status.on && st.status.value) return st.status.value.toUpperCase();
+  return 'RE/MAX AXXIA IMÓVEIS';
 }
 
 // --- estilo Editorial — 1:1 (feed) ---
@@ -464,8 +519,8 @@ function renderEditorialSquare(ctx, W, H, st, variantColors){
   var cx = pad;
   var cursor = Math.round(H * 0.472);
 
-  cursor += drawSolidBox(ctx, cx, cursor, 'RE/MAX AXXIA IMÓVEIS', {
-    fontSize: 19, weight: '800', family: 'Work Sans',
+  cursor += drawSolidBox(ctx, cx, cursor, editorialTag(st), {
+    fontSize: 21, weight: '800', family: 'Work Sans',
     bg: variantColors.bg, textColor: variantColors.text,
     letterSpacing: 1, padX: 16, padY: 9, radius: 5, maxW: W - cx - rightPad
   });
@@ -565,11 +620,11 @@ function renderEditorialSquare(ctx, W, H, st, variantColors){
   ctx.shadowOffsetY = 1;
   ctx.textAlign = 'right';
   ctx.fillStyle = CREAM;
-  ctx.font = '600 22px "Fraunces"';
-  ctx.fillText('Giovani Oliveira', W - rightPad, footerCenterY - 6);
-  ctx.font = '400 15px "Work Sans"';
-  ctx.fillStyle = 'rgba(244,240,230,0.8)';
-  ctx.fillText('CRECI 110.031 · 23 anos de mercado', W - rightPad, footerCenterY + 16);
+  ctx.font = '600 29px "Fraunces"';
+  ctx.fillText('Giovani Oliveira', W - rightPad, footerCenterY - 5);
+  ctx.font = '500 18px "Work Sans"';
+  ctx.fillStyle = 'rgba(244,240,230,0.9)';
+  ctx.fillText('CRECI 110.031 · 23 anos de mercado', W - rightPad, footerCenterY + 20);
   ctx.restore();
 }
 
@@ -601,8 +656,8 @@ function renderEditorialTall(ctx, W, H, st, variantColors){
   var cx = pad;
   var cursor = Math.round(H * 0.615);
 
-  cursor += drawSolidBox(ctx, cx, cursor, 'RE/MAX AXXIA IMÓVEIS', {
-    fontSize: 25, weight: '800', family: 'Work Sans',
+  cursor += drawSolidBox(ctx, cx, cursor, editorialTag(st), {
+    fontSize: 28, weight: '800', family: 'Work Sans',
     bg: variantColors.bg, textColor: variantColors.text,
     letterSpacing: 1.3, padX: 20, padY: 12, radius: 6, maxW: W - cx - rightPad
   });
@@ -702,11 +757,11 @@ function renderEditorialTall(ctx, W, H, st, variantColors){
   ctx.shadowOffsetY = 1;
   ctx.textAlign = 'right';
   ctx.fillStyle = CREAM;
-  ctx.font = '600 28px "Fraunces"';
-  ctx.fillText('Giovani Oliveira', W - rightPad, footerCenterY - 8);
-  ctx.font = '400 19px "Work Sans"';
-  ctx.fillStyle = 'rgba(244,240,230,0.8)';
-  ctx.fillText('CRECI 110.031 · 23 anos de mercado', W - rightPad, footerCenterY + 20);
+  ctx.font = '600 37px "Fraunces"';
+  ctx.fillText('Giovani Oliveira', W - rightPad, footerCenterY - 6);
+  ctx.font = '500 23px "Work Sans"';
+  ctx.fillStyle = 'rgba(244,240,230,0.9)';
+  ctx.fillText('CRECI 110.031 · 23 anos de mercado', W - rightPad, footerCenterY + 26);
   ctx.restore();
 }
 
@@ -736,11 +791,27 @@ function render(){
   }
 }
 
-['localizacao','tipo','status','valor','area','quartos','vagas','destaque'].forEach(function(key){
-  el(key).addEventListener('input', render);
+FIELD_KEYS.forEach(function(key){
+  el(key).addEventListener('input', function(){
+    document.querySelector('[data-toggle-row="' + key + '"]').classList.remove('invalid');
+    render();
+    draftSaveSoon();
+  });
   el('tg_' + key).addEventListener('change', function(){
     document.querySelector('[data-toggle-row="' + key + '"]').classList.toggle('off', !this.checked);
+    document.querySelector('[data-toggle-row="' + key + '"]').classList.remove('invalid');
     render();
+    draftSaveSoon();
+  });
+});
+
+document.querySelectorAll('#anuncioSeg button').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var key = btn.getAttribute('data-anuncio');
+    if (key === anuncio) return;
+    applyAnuncio(key, true);
+    track('tipo_anuncio', { anuncio: key });
+    draftSaveSoon();
   });
 });
 
@@ -749,6 +820,7 @@ document.querySelectorAll('#variantSeg button').forEach(function(btn){
     document.querySelectorAll('#variantSeg button').forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
     btn.setAttribute('aria-pressed', 'true');
     render();
+    draftSaveSoon();
   });
 });
 
@@ -758,6 +830,8 @@ document.querySelectorAll('#styleSeg button').forEach(function(btn){
     btn.setAttribute('aria-pressed', 'true');
     artStyle = btn.getAttribute('data-style');
     render();
+    track('estilo', { estilo: artStyle });
+    draftSaveSoon();
   });
 });
 
@@ -780,12 +854,25 @@ var videoLoadGen = 0; // guarda contra o evento "change" disparando mais de
 var videoTabFile = null;
 var aeResultFile = null;
 
+function setVideoTabFile(file, fromDraft){
+  videoTabFile = file;
+  el('uploadFilename').textContent = file.name;
+  el('videoPickTitle').textContent = 'Trocar o vídeo';
+  var thumb = el('videoThumb');
+  thumb.hidden = true;
+  makeVideoThumb(file).then(function(url){
+    if (url && videoTabFile === file){ thumb.src = url; thumb.hidden = false; }
+  });
+  if (mode === 'video') loadVideoIntoPreview(file);
+  if (!fromDraft){
+    track('midia', { tipo: 'video', mb: Math.round(file.size / 1048576) });
+    draftSaveFile('video', file.size <= DRAFT_MAX_VIDEO ? file : null);
+  }
+}
 el('videoInput').addEventListener('change', function(e){
   var file = e.target.files && e.target.files[0];
   if (!file) return;
-  videoTabFile = file;
-  el('uploadFilename').textContent = file.name;
-  loadVideoIntoPreview(file);
+  setVideoTabFile(file, false);
 });
 
 function clearVideoPreview(){
@@ -889,6 +976,9 @@ function drawPhotoOnCtx(targetCtx, W, H){
 el('fotoInput').addEventListener('change', function(e){
   var file = e.target.files && e.target.files[0];
   if (!file) return;
+  loadPhotoFile(file, false);
+});
+function loadPhotoFile(file, fromDraft){
   if (photoObjectUrl) URL.revokeObjectURL(photoObjectUrl);
   photoObjectUrl = URL.createObjectURL(file);
 
@@ -899,7 +989,8 @@ el('fotoInput').addEventListener('change', function(e){
   img.onload = function(){
     photoImg = img;
     photoEl.src = photoObjectUrl;
-    el('fotoFilename').textContent = file.name;
+    el('fotoFilename').textContent = file.name || 'foto.jpg';
+    el('fotoPickTitle').textContent = 'Trocar a foto';
     photoZoom = 1;
     photoPanXFrac = 0;
     photoPanYFrac = 0;
@@ -907,21 +998,25 @@ el('fotoInput').addEventListener('change', function(e){
     el('fotoZoomLabel').textContent = '1.0x';
     updatePhotoTransform();
     updateEmptyMsg();
-    exportBtn.disabled = false;
+    exportBtn.disabled = mode !== 'foto';
     resetEnhanceForNewPhoto(img, photoObjectUrl);
     setStatus('');
+    if (!fromDraft){
+      track('midia', { tipo: 'foto', mb: Math.round(file.size / 1048576 * 10) / 10 });
+      draftSaveFile('foto', file.size <= DRAFT_MAX_PHOTO ? file : null);
+    }
   };
   img.onerror = function(){
     setStatus('Não consegui abrir essa foto. Tenta outro arquivo (JPG ou PNG).', 'error');
   };
   img.src = photoObjectUrl;
-});
+}
 
 // ---------------- Melhorar foto (IA no servidor) ----------------
 // A foto vai pro nosso servidor no Railway, que chama o Gemini com a chave
 // guardada lá (a chave nunca passa pelo navegador). Guardamos a original e
 // a melhorada pra alternar entre as duas sem gastar outra chamada.
-var ENHANCE_ENDPOINT = 'https://studio-giovani-video-server-production.up.railway.app/enhance-photo';
+var ENHANCE_ENDPOINT = SERVER + '/enhance-photo';
 var photoOriginal = null;   // {img, url}
 var photoEnhancedCache = null; // {img, url}
 var photoShowingEnhanced = false;
@@ -959,8 +1054,7 @@ function showPhotoVersion(v){
   updatePhotoTransform();
 }
 
-// Prepara a original: JPEG, lado maior até 3072px (a IA devolve em 4K de
-// qualquer jeito) — isso normaliza HEIC/PNG gigante e acelera o upload.
+// Prepara a original: JPEG, lado maior até 3072px (a IA devolve em 2K) — isso normaliza HEIC/PNG gigante e acelera o upload.
 function originalAsJpeg(img){
   return new Promise(function(resolve, reject){
     var maxSide = 3072;
@@ -998,6 +1092,7 @@ async function enhancePhoto(){
     return;
   }
   var myToken = ++enhanceToken;
+  var tEnh = Date.now();
   enhanceBtn.disabled = true;
   exportBtn.disabled = true;
   setEnhanceBtn('Melhorando…', true);
@@ -1025,7 +1120,8 @@ async function enhancePhoto(){
     enhanceBtn.classList.add('done');
     setEnhanceBtn('Foto melhorada', false);
     revertBtn.hidden = false;
-    setStatus('Foto melhorada (' + loaded.img.naturalWidth + '×' + loaded.img.naturalHeight + '). Se não gostar, volte pra original.', 'ok');
+    setStatus('Foto melhorada. Se não gostar, volte pra original.', 'ok');
+    track('melhorar_foto', { ok: true, seg: (Date.now() - tEnh) / 1000 });
   } catch (err) {
     if (myToken !== enhanceToken) return;
     console.error('[Studio Giovani] falha ao melhorar foto:', err);
@@ -1033,6 +1129,7 @@ async function enhancePhoto(){
     enhanceBtn.disabled = false;
     setEnhanceBtn('Melhorar foto', false);
     setStatus('Não deu pra melhorar a foto (' + detail + '). A original continua valendo.', 'error');
+    track('melhorar_foto', { ok: false, erro: String(detail).slice(0, 40) });
   } finally {
     clearTimeout(timer);
     if (myToken === enhanceToken) exportBtn.disabled = !photoImg;
@@ -1102,6 +1199,8 @@ document.querySelectorAll('#formatSeg button').forEach(function(btn){
     btn.setAttribute('aria-pressed', 'true');
     fotoFormat = btn.getAttribute('data-format');
     applyFormat();
+    track('formato', { formato: fotoFormat === '1:1' ? 'feed' : 'story' });
+    draftSaveSoon();
   });
 });
 
@@ -1116,9 +1215,10 @@ function applyFormat(){
     updatePhotoTransform();
     render();
   });
+  el('stageShell').classList.toggle('square', fotoFormat === '1:1');
   stageCaption.textContent = fotoFormat === '1:1'
-    ? 'É assim que fica no feed do Instagram. Ajuste ao lado e a prévia atualiza sozinha.'
-    : 'É assim que fica no Reels/Stories. Ajuste ao lado e a prévia atualiza sozinha.';
+    ? 'É assim que fica no feed do Instagram. Mude os dados e a prévia atualiza sozinha.'
+    : 'É assim que fica no Reels/Stories. Mude os dados e a prévia atualiza sozinha.';
 }
 
 // --- abas de modo (Vídeo · Foto) ---
@@ -1126,8 +1226,11 @@ document.querySelectorAll('#modeSeg button').forEach(function(btn){
   btn.addEventListener('click', function(){
     document.querySelectorAll('#modeSeg button').forEach(function(b){ b.setAttribute('aria-pressed', 'false'); });
     btn.setAttribute('aria-pressed', 'true');
+    if (mode === btn.getAttribute('data-mode')) return;
     mode = btn.getAttribute('data-mode');
     applyMode();
+    track('aba', { aba: mode });
+    draftSaveSoon();
   });
 });
 
@@ -1149,14 +1252,14 @@ function applyMode(){
   el('fotoUploadSection').hidden = !isFoto;
   videoEl.style.display = isFoto ? 'none' : 'block';
   photoEl.style.display = isFoto ? 'block' : 'none';
-  pageTitle.textContent = isFoto ? 'Monte seu post' : (isAE ? 'Auto edit do imóvel' : 'Monte seu vídeo');
-  exportBtn.textContent = isFoto ? 'Gerar imagem final (JPG)' : 'Gerar vídeo final (MP4)';
+  pageTitle.textContent = isFoto ? 'Monte seu post' : (isAE ? 'Montagem automática' : 'Monte seu vídeo');
+  exportBtn.textContent = isFoto ? 'Gerar imagem final' : 'Gerar vídeo final';
   exportHint.textContent = isFoto
-    ? 'Processamos aqui mesmo no navegador — é instantâneo.'
-    : (isAE ? 'Queima a arte por cima do vídeo montado pela IA.' : 'Processamos no servidor — geralmente leva só alguns segundos.');
-  emptyMsg.innerHTML = isFoto
-    ? 'Escolha a foto do imóvel ao lado<br>pra ver a prévia com a arte por cima'
-    : (isAE ? 'Escolha os clipes ao lado e toque em<br>“Montar vídeo com IA”. O vídeo montado<br>aparece aqui com a arte por cima.' : 'Escolha o vídeo do imóvel ao lado<br>pra ver a prévia com a arte por cima');
+    ? 'Fica pronta na hora, aqui mesmo no celular.'
+    : (isAE ? 'Coloca a arte por cima do vídeo montado pela IA.' : 'Processamos no servidor. Geralmente leva só alguns segundos.');
+  emptyMsg.textContent = isFoto
+    ? 'Escolha a foto do imóvel pra ver a prévia com a arte por cima'
+    : (isAE ? 'Escolha os vídeos e toque em “Montar vídeo com IA”. O vídeo montado aparece aqui com a arte por cima.' : 'Escolha o vídeo do imóvel pra ver a prévia com a arte por cima');
   setStatus('');
   setProgress(null);
 
@@ -1175,11 +1278,13 @@ function applyMode(){
     canvas.width = 1080;
     canvas.height = 1920;
     stageEl.style.aspectRatio = '1080/1920';
-    stageCaption.textContent = 'É assim que fica no Reels/Stories. Ajuste ao lado e a prévia atualiza sozinha.';
+    el('stageShell').classList.remove('square');
+    stageCaption.textContent = 'É assim que fica no Reels/Stories. Mude os dados e a prévia atualiza sozinha.';
     render();
     exportBtn.disabled = !videoFile;
   }
   updateEmptyMsg();
+  aeListenReset();
 }
 
 function boot(){
@@ -1191,15 +1296,13 @@ function boot(){
   })).then(render).catch(function(){});
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
 }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-else boot();
 
 window.addEventListener('resize', function(){
   if (mode === 'foto') updatePhotoTransform();
 });
 
-// ======================= EXPORT (servidor Railway — vídeo) =======================
-var RENDER_ENDPOINT = 'https://studio-giovani-video-server-production.up.railway.app/render';
+// ======================= EXPORT (servidor — vídeo) =======================
+var RENDER_ENDPOINT = SERVER + '/render';
 
 function overlayPngBlob(){
   return new Promise(function(resolve){
@@ -1218,72 +1321,130 @@ function downloadBlob(blob, filename){
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
 }
 
 function fileBaseName(){
-  return (el('localizacao').value || 'imovel').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'imovel';
+  var base = splitLocalizacaoValue(el('localizacao').value || '').bairro || 'imovel';
+  return base.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'imovel';
 }
 
+function newId(){
+  try { if (crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+function readXhrError(xhr){
+  return new Promise(function(resolve){
+    var fallback = 'O servidor respondeu ' + xhr.status;
+    if (!xhr.response || !xhr.response.size){ resolve(fallback); return; }
+    var reader = new FileReader();
+    reader.onload = function(){
+      try { resolve(JSON.parse(reader.result).error || fallback); } catch(e){ resolve(fallback); }
+    };
+    reader.onerror = function(){ resolve(fallback); };
+    reader.readAsText(xhr.response);
+  });
+}
+
+// Progresso em três fases: envio do vídeo, processamento real no servidor
+// (o servidor conta quanto do vídeo o ffmpeg já passou) e download.
 async function exportVideo(){
   if (!videoFile) return;
+  var isAE = mode === 'autoedit';
+  if (isAE && !aeMontagemId){
+    setStatus('Monte o vídeo com IA primeiro.', 'error');
+    return;
+  }
   exportBtn.disabled = true;
-  setProgress(null);
+  var t0 = Date.now();
+  var progId = newId();
+  var pollTimer = null;
+  var phase = 'upload';
+  var upW = isAE ? 0.04 : 0.45;
+  function stopPoll(){ if (pollTimer){ clearInterval(pollTimer); pollTimer = null; } }
+  function poll(){
+    fetch(SERVER + '/render/progresso/' + encodeURIComponent(progId), { cache: 'no-store' })
+      .then(function(r){ return r.json(); })
+      .then(function(p){
+        if (phase !== 'server' || !p) return;
+        if (p.fase === 'fila'){ setStatus('O servidor está terminando outro vídeo. Já já começa o seu…'); return; }
+        setStatus('Colocando a arte no vídeo…');
+        setProgress(upW + (0.92 - upW) * Math.max(0, Math.min(1, p.pct || 0)));
+      }).catch(function(){});
+  }
   try {
     setStatus('Preparando a arte…');
+    setProgress(0);
     var overlayBlob = await overlayPngBlob();
 
-    setStatus('Enviando o vídeo pro processador…');
-    setProgress(0);
-
     var formData = new FormData();
-    formData.append('video', videoFile);
+    formData.append('progressId', progId);
+    if (isAE) formData.append('montagemId', aeMontagemId);
     formData.append('overlay', overlayBlob, 'overlay.png');
+    if (!isAE) formData.append('video', videoFile);
 
+    setStatus(isAE ? 'Colocando a arte no vídeo montado…' : 'Enviando o vídeo…');
     var blob = await new Promise(function(resolve, reject){
       var xhr = new XMLHttpRequest();
       xhr.open('POST', RENDER_ENDPOINT);
       xhr.responseType = 'blob';
+      xhr.timeout = 12 * 60 * 1000;
       xhr.upload.onprogress = function(e){
-        if (e.lengthComputable){
-          setProgress(Math.min(0.9, e.loaded / e.total * 0.9));
+        if (e.lengthComputable && phase === 'upload') setProgress(upW * e.loaded / e.total);
+      };
+      xhr.upload.onload = function(){
+        if (phase !== 'upload') return;
+        phase = 'server';
+        setProgress(upW);
+        setStatus('Colocando a arte no vídeo…');
+        poll();
+        pollTimer = setInterval(poll, 1000);
+      };
+      xhr.onprogress = function(e){
+        if (xhr.status && xhr.status !== 200) return;
+        if (phase !== 'download'){
+          phase = 'download';
+          stopPoll();
+          setStatus('Baixando o vídeo pronto…');
         }
+        if (e.lengthComputable) setProgress(0.92 + 0.08 * e.loaded / e.total);
       };
       xhr.onload = function(){
-        if (xhr.status >= 200 && xhr.status < 300){
-          resolve(xhr.response);
-        } else {
-          var reader = new FileReader();
-          reader.onload = function(){
-            try {
-              var data = JSON.parse(reader.result);
-              reject(new Error(data.error || ('Erro ' + xhr.status)));
-            } catch(e){
-              reject(new Error('Erro ' + xhr.status));
-            }
-          };
-          reader.onerror = function(){ reject(new Error('Erro ' + xhr.status)); };
-          reader.readAsText(xhr.response);
-        }
+        stopPoll();
+        if (xhr.status >= 200 && xhr.status < 300){ resolve(xhr.response); return; }
+        readXhrError(xhr).then(function(msg){
+          var err = new Error(msg);
+          err.status = xhr.status;
+          reject(err);
+        });
       };
-      xhr.onerror = function(){ reject(new Error('Falha de conexão com o processador de vídeo.')); };
+      xhr.onerror = function(){ stopPoll(); reject(new Error('Falha de conexão com o servidor. Confere a internet.')); };
+      xhr.ontimeout = function(){ stopPoll(); reject(new Error('Demorou demais.')); };
       xhr.send(formData);
     });
 
-    setStatus('Finalizando…');
-    setProgress(0.95);
-
-    downloadBlob(blob, 'giovani-' + fileBaseName() + (mode === 'autoedit' ? '-autoedit' : '') + '.mp4');
     setProgress(1);
-    setStatus('Vídeo pronto — o download deve começar sozinho.', 'ok');
-    setTimeout(function(){ setProgress(null); }, 1500);
+    setStatus('Vídeo pronto!', 'ok');
+    setTimeout(function(){ setProgress(null); }, 1200);
+    track('gerar', { tipo: isAE ? 'montagem' : 'video', ok: true, seg: (Date.now() - t0) / 1000, anuncio: anuncio });
+    showDone('video', blob, 'giovani-' + fileBaseName() + (isAE ? '-montagem' : '') + '.mp4');
   } catch (err) {
+    stopPoll();
     console.error('[Studio Giovani] falha ao gerar vídeo:', err);
     setProgress(null);
-    var detail = (err && err.message) ? ' (' + err.message + ')' : '';
-    setStatus('Não deu pra gerar o vídeo' + detail + '. Tenta de novo, ou com um vídeo menor.', 'error');
+    track('gerar', { tipo: isAE ? 'montagem' : 'video', ok: false, anuncio: anuncio });
+    track('erro', { onde: 'gerar_video', msg: String((err && err.message) || '').slice(0, 60) });
+    if (isAE && err && err.status === 410){
+      aeInvalidate(err.message);
+      setStatus(err.message, 'error');
+    } else {
+      var detail = (err && err.message) ? ' (' + err.message + ')' : '';
+      setStatus('Não deu pra gerar o vídeo' + detail + '. Tenta de novo' + (isAE ? '.' : ', ou com um vídeo menor.'), 'error');
+    }
   } finally {
-    exportBtn.disabled = false;
+    stopPoll();
+    exportBtn.disabled = !videoFile;
   }
 }
 
@@ -1323,32 +1484,193 @@ async function exportFoto(){
     var suffix = fotoFormat === '1:1' ? '-feed' : '-story';
     var styleSuffix = artStyle === 'editorial' ? '-editorial' : '';
     var enhancedSuffix = photoShowingEnhanced ? '-melhorada' : '';
-    downloadBlob(blob, 'giovani-' + fileBaseName() + styleSuffix + enhancedSuffix + suffix + '.jpg');
-    setStatus('Imagem pronta — o download deve começar sozinho.', 'ok');
+    setStatus('Imagem pronta!', 'ok');
+    track('gerar', { tipo: 'foto', ok: true, anuncio: anuncio, estilo: artStyle, formato: fotoFormat === '1:1' ? 'feed' : 'story', melhorada: photoShowingEnhanced });
+    showDone('foto', blob, 'giovani-' + fileBaseName() + styleSuffix + enhancedSuffix + suffix + '.jpg');
   } catch (err) {
     console.error('[Studio Giovani] falha ao gerar imagem:', err);
+    track('gerar', { tipo: 'foto', ok: false, anuncio: anuncio });
     var detail = (err && err.message) ? ' (' + err.message + ')' : '';
     setStatus('Não deu pra gerar a imagem' + detail + '. Tenta de novo.', 'error');
   } finally {
-    exportBtn.disabled = false;
+    exportBtn.disabled = !photoImg;
   }
 }
 
-exportBtn.addEventListener('click', function(){
+// ---------------- validação + "Confira os dados" ----------------
+function clearInvalid(){
+  document.querySelectorAll('.toggle-row.invalid').forEach(function(r){ r.classList.remove('invalid'); });
+  document.querySelectorAll('.field-err').forEach(function(n){ n.remove(); });
+}
+function validateFields(){
+  clearInvalid();
+  var probs = [];
+  if (el('tg_localizacao').checked && !el('localizacao').value.trim()) probs.push(['localizacao', 'Escreva o bairro (e a cidade, se quiser).']);
+  if (anuncioCfg().valorReq && el('tg_valor').checked && !el('valor').value.trim()) probs.push(['valor', 'Escreva o valor. Se não quiser mostrar, desmarque a caixinha ao lado.']);
+  probs.forEach(function(p){
+    var row = document.querySelector('[data-toggle-row="' + p[0] + '"]');
+    row.classList.add('invalid');
+    var msg = document.createElement('div');
+    msg.className = 'field-err';
+    msg.textContent = p[1];
+    row.querySelector('.toggle-field').appendChild(msg);
+  });
+  if (probs.length){
+    var first = el(probs[0][0]);
+    first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(function(){ try { first.focus({ preventScroll: true }); } catch(e){ first.focus(); } }, 350);
+    setStatus(probs.length > 1 ? 'Falta preencher o bairro e o valor.' : (probs[0][0] === 'valor' ? 'Falta preencher o valor.' : 'Falta preencher o bairro.'), 'error');
+    track('validacao_bloqueou', { campo: probs.map(function(p){ return p[0]; }).join(',') });
+    return false;
+  }
+  return true;
+}
+
+var FIELD_NAMES = { status: 'Etiqueta', valor: 'Valor', localizacao: 'Bairro, cidade', tipo: 'Tipo do imóvel', area: 'Área', quartos: 'Quartos', vagas: 'Vagas', destaque: 'Diferencial' };
+function openCheckSheet(){
+  var st = readState();
+  var ul = el('checkList');
+  ul.innerHTML = '';
+  function row(label, value){
+    var li = document.createElement('li');
+    var a = document.createElement('span'); a.textContent = label;
+    var b = document.createElement('strong'); b.textContent = value;
+    li.append(a, b); ul.appendChild(li);
+  }
+  var ANUNCIO_NOMES = { venda: 'Venda', aluguel: 'Aluguel', vendido: 'Vendido', comercial: 'Comercial', rural: 'Rural', temporada: 'Temporada' };
+  row('Anúncio', ANUNCIO_NOMES[anuncio]);
+  ['status', 'valor', 'localizacao', 'tipo', 'area', 'quartos', 'vagas', 'destaque'].forEach(function(k){
+    if (st[k].on && st[k].value){
+      var label = k === 'quartos' ? el('quartosLabel').textContent : FIELD_NAMES[k];
+      row(label, k === 'status' ? st[k].value.toUpperCase() : st[k].value);
+    }
+  });
+  if (mode === 'foto'){
+    row('Formato', fotoFormat === '1:1' ? 'Feed (quadrado)' : 'Story / Reels (em pé)');
+    row('Estilo', artStyle === 'editorial' ? 'Editorial' : 'Clássico');
+  }
+  var sheet = el('checkSheet');
+  if (!sheet.showModal){ runExport(); return; }
+  sheet.showModal();
+  el('checkOkBtn').focus();
+}
+function runExport(){
   if (mode === 'foto') exportFoto();
   else exportVideo();
+}
+el('checkOkBtn').addEventListener('click', function(){
+  el('checkSheet').close();
+  track('conferencia', { acao: 'gerar' });
+  runExport();
+});
+el('checkFixBtn').addEventListener('click', function(){
+  el('checkSheet').close();
+  track('conferencia', { acao: 'corrigir' });
+  var target = el('localizacao');
+  target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  setTimeout(function(){ try { target.focus({ preventScroll: true }); } catch(e){} }, 350);
 });
 
-// ======================= AUTO EDIT (IA no servidor) =======================
-// Sobe os clipes brutos pro servidor, que manda uma cópia leve pro Gemini
-// montar a edição (hook, ordem, ritmo, trechos) e devolve o vídeo já cortado
-// e juntado. O resultado vira o vídeo da prévia desta aba, com a arte por
-// cima — e o botão "Gerar vídeo final" queima a arte igual na aba Vídeo.
-var AUTOEDIT_ENDPOINT = window.__SG_AUTOEDIT_ENDPOINT || 'https://studio-giovani-video-server-production.up.railway.app/autoedit/smart';
+exportBtn.addEventListener('click', function(){
+  if (exportBtn.disabled) return;
+  if (mode === 'autoedit' && !aeMontagemId){ setStatus('Monte o vídeo com IA primeiro.', 'error'); return; }
+  if (!validateFields()) return;
+  setStatus('');
+  openCheckSheet();
+});
+
+// ---------------- tela "Pronto!" ----------------
+var doneData = null;
+var isTouch = false;
+try { isTouch = window.matchMedia('(pointer: coarse)').matches; } catch (e) {}
+
+function showDone(kind, blob, filename){
+  if (doneData && doneData.url) URL.revokeObjectURL(doneData.url);
+  var type = blob.type || (kind === 'foto' ? 'image/jpeg' : 'video/mp4');
+  var file = null;
+  try { file = new File([blob], filename, { type: type }); } catch (e) {}
+  doneData = { kind: kind, blob: blob, filename: filename, file: file, url: URL.createObjectURL(blob), acted: false };
+  var media = el('doneMedia');
+  media.innerHTML = '';
+  if (kind === 'foto'){
+    var img = document.createElement('img');
+    img.alt = 'Imagem pronta';
+    img.src = doneData.url;
+    media.appendChild(img);
+  } else {
+    var v = document.createElement('video');
+    v.src = doneData.url;
+    v.controls = true; v.playsInline = true; v.muted = true; v.loop = true; v.autoplay = true;
+    v.setAttribute('playsinline', '');
+    media.appendChild(v);
+    v.play().catch(function(){});
+  }
+  var canShare = false;
+  try { canShare = !!(file && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) {}
+  el('doneShareBtn').hidden = !canShare;
+  el('doneSaveBtn').className = canShare ? 'secondary-btn' : 'primary-btn';
+  el('doneSaveBtn').textContent = isTouch ? 'Salvar no celular' : 'Baixar ' + (kind === 'foto' ? 'a imagem' : 'o vídeo');
+  el('doneHint').textContent = canShare
+    ? 'Mande direto pro WhatsApp ou Instagram, ou salve no celular.'
+    : (kind === 'foto' ? 'Salve a imagem e poste do seu jeito.' : 'Salve o vídeo e poste do seu jeito.');
+  el('doneTitle').textContent = kind === 'foto' ? 'Imagem pronta!' : 'Vídeo pronto!';
+  el('doneStatus').textContent = '';
+  el('doneStatus').dataset.state = '';
+  var sheet = el('doneSheet');
+  if (sheet.showModal){ sheet.showModal(); }
+  else { downloadBlob(blob, filename); }
+}
+
+el('doneShareBtn').addEventListener('click', function(){
+  if (!doneData || !doneData.file) return;
+  var d = doneData;
+  navigator.share({ files: [d.file], title: 'Imóvel · Giovani Oliveira' }).then(function(){
+    d.acted = true;
+    track('pronto_compartilhar', { tipo: d.kind, ok: true });
+    el('doneStatus').textContent = 'Enviado!';
+    el('doneStatus').dataset.state = 'ok';
+  }).catch(function(err){
+    if (err && err.name === 'AbortError') return;
+    track('pronto_compartilhar', { tipo: d.kind, ok: false });
+    el('doneStatus').textContent = 'Não deu pra abrir o compartilhamento. Toque em “Salvar” e envie pela galeria.';
+    el('doneStatus').dataset.state = 'error';
+  });
+});
+el('doneSaveBtn').addEventListener('click', function(){
+  if (!doneData) return;
+  downloadBlob(doneData.blob, doneData.filename);
+  doneData.acted = true;
+  track('pronto_salvar', { tipo: doneData.kind });
+  el('doneStatus').textContent = isTouch
+    ? 'Salvo. Procure em Arquivos ou Downloads (no iPhone, toque em compartilhar e “Salvar vídeo/imagem”).'
+    : 'Download iniciado. O arquivo vai pra sua pasta de Downloads.';
+  el('doneStatus').dataset.state = 'ok';
+});
+el('doneCloseBtn').addEventListener('click', function(){ el('doneSheet').close(); });
+el('doneSheet').addEventListener('close', function(){
+  var v = el('doneMedia').querySelector('video');
+  if (v) v.pause();
+  if (doneData) track('pronto_fechar', { tipo: doneData.kind, agiu: doneData.acted });
+});
+
+
+// ======================= MONTAGEM AUTOMÁTICA (IA no servidor) =======================
+// Sobe os vídeos brutos pro servidor, que manda uma cópia leve pro Gemini
+// montar a edição (cena de abertura, ordem, ritmo, trechos) e devolve uma
+// prévia leve do vídeo montado. A montagem em qualidade cheia fica guardada
+// no servidor (1 hora): "Gerar vídeo final" só manda a arte (montagemId) e o
+// corretor pode reordenar/tirar/recolocar cenas sem reenviar nada.
+var AUTOEDIT_ENDPOINT = window.__SG_AUTOEDIT_ENDPOINT || (SERVER + '/autoedit/smart');
+var REMONTAR_ENDPOINT = AUTOEDIT_ENDPOINT.replace(/\/smart$/, '/remontar');
 var AE_MAX = 10;
 var aeClips = [];
 var aeBusy = false;
 var aeRunBtn = el('aeRunBtn');
+var aeMontagemId = null;
+var aePlanData = null;   // plano que está no vídeo de agora
+var aeEdit = [];         // cenas na ordem que o corretor quer: {indice, inicio, fim, ambiente, nome, fala, motivo, dentro}
+var aeThumbUrls = {};    // indice -> dataURL da miniatura
+var aeThumbToken = 0;
 
 function aeSetStatus(text, state){
   var s = el('aeStatus');
@@ -1371,32 +1693,107 @@ function aeSetBtn(label, busy){
 }
 function aeRefreshBtn(){
   aeRunBtn.disabled = aeBusy || aeClips.length < 2 || aeClips.length > AE_MAX;
+  el('aeRemontarBtn').disabled = aeBusy;
+}
+
+// A montagem atual deixou de valer (trocou vídeos ou locução, ou expirou no servidor)
+function aeInvalidate(msg){
+  var had = !!(aeResultFile || aeMontagemId);
+  aeResultFile = null;
+  aeMontagemId = null;
+  aePlanData = null;
+  aeEdit = [];
+  el('aePlan').hidden = true;
+  aeListenReset();
+  if (mode === 'autoedit') clearVideoPreview();
+  if (had && msg) aeSetStatus(msg);
+}
+
+// miniatura de um vídeo: primeiro quadro "bom" (0,5s)
+function makeVideoThumb(file){
+  return new Promise(function(resolve){
+    var url = URL.createObjectURL(file);
+    var v = document.createElement('video');
+    var done = false;
+    function finish(data){
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      v.removeAttribute('src'); try { v.load(); } catch(e){}
+      URL.revokeObjectURL(url);
+      resolve(data);
+    }
+    var timer = setTimeout(function(){ finish(null); }, 8000);
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.setAttribute('playsinline', '');
+    v.onloadedmetadata = function(){
+      try { v.currentTime = Math.min(0.5, (v.duration || 1) / 3); } catch(e){ finish(null); }
+    };
+    v.onseeked = function(){
+      try {
+        var w = 120, h = Math.round(w * (v.videoHeight || 16) / (v.videoWidth || 9));
+        var c = document.createElement('canvas');
+        c.width = w; c.height = Math.max(1, h);
+        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+        finish(c.toDataURL('image/jpeg', 0.7));
+      } catch(e){ finish(null); }
+    };
+    v.onerror = function(){ finish(null); };
+    v.src = url;
+  });
+}
+
+function aeRenderThumbs(){
+  var ul = el('aeThumbs');
+  ul.innerHTML = '';
+  var total = 0;
+  aeClips.forEach(function(f, i){
+    total += f.size;
+    var li = document.createElement('li');
+    var ph = document.createElement(aeThumbUrls[i] ? 'img' : 'div');
+    ph.className = 'ph';
+    if (aeThumbUrls[i]){ ph.src = aeThumbUrls[i]; ph.alt = ''; }
+    var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = (i + 1) + '. ' + f.name;
+    li.title = f.name + ' · ' + aeMB(f.size);
+    li.append(ph, nm);
+    ul.appendChild(li);
+  });
+  var sum = el('aeSum');
+  sum.innerHTML = '';
+  sum.className = 'ae-sum';
+  if (aeClips.length){
+    var bad = aeClips.length < 2 || aeClips.length > AE_MAX;
+    if (bad) sum.className = 'ae-sum warn';
+    var a = document.createElement('span');
+    a.textContent = aeClips.length > AE_MAX ? aeClips.length + ' vídeos (máximo ' + AE_MAX + ')'
+      : (aeClips.length < 2 ? 'Escolha pelo menos 2 vídeos' : aeClips.length + ' vídeos escolhidos');
+    var b = document.createElement('span'); b.textContent = aeMB(total);
+    sum.append(a, b);
+  }
+}
+
+async function aeLoadThumbs(){
+  var my = ++aeThumbToken;
+  for (var i = 0; i < aeClips.length; i++){
+    if (my !== aeThumbToken) return;
+    var data = await makeVideoThumb(aeClips[i]);
+    if (my !== aeThumbToken) return;
+    if (data){ aeThumbUrls[i] = data; aeRenderThumbs(); if (aePlanData) aeRenderPlan(); }
+  }
 }
 
 el('aeInput').addEventListener('change', function(){
-  aeClips = Array.from(this.files || []);
-  var ul = el('aeFiles');
-  ul.innerHTML = '';
-  var total = 0;
-  aeClips.forEach(function(f){
-    total += f.size;
-    var li = document.createElement('li');
-    var a = document.createElement('span'); a.textContent = f.name;
-    var b = document.createElement('span'); b.textContent = aeMB(f.size);
-    li.append(a, b); ul.appendChild(li);
-  });
-  if (aeClips.length){
-    var li = document.createElement('li');
-    var bad = aeClips.length < 2 || aeClips.length > AE_MAX;
-    li.className = 'total' + (bad ? ' warn' : '');
-    var a = document.createElement('span');
-    a.textContent = aeClips.length > AE_MAX ? aeClips.length + ' clipes (máximo ' + AE_MAX + ')'
-      : (aeClips.length < 2 ? 'Escolha pelo menos 2 clipes' : aeClips.length + ' clipes');
-    var b = document.createElement('span'); b.textContent = aeMB(total);
-    li.append(a, b); ul.appendChild(li);
-  }
-  el('aeFilename').textContent = aeClips.length ? 'Trocar os clipes' : 'De 2 a 10 vídeos brutos do mesmo imóvel';
+  var picked = Array.from(this.files || []);
+  if (!picked.length) return;
+  aeClips = picked;
+  aeThumbUrls = {};
+  aeRenderThumbs();
+  aeLoadThumbs();
+  el('aePickTitle').textContent = 'Trocar os vídeos';
+  el('aeFilename').textContent = 'Toque aqui pra escolher outros';
+  aeInvalidate('Você trocou os vídeos. Toque em “Montar vídeo com IA” de novo.');
   aeRefreshBtn();
+  track('midia', { tipo: 'clipes', n: aeClips.length, mb: Math.round(picked.reduce(function(s, f){ return s + f.size; }, 0) / 1048576) });
 });
 
 function aeDecodePlan(h){
@@ -1409,41 +1806,158 @@ function aeDecodePlan(h){
   } catch (e) { return null; }
 }
 
-function aeRenderPlan(plan){
-  el('aePlan').hidden = false;
-  el('aeResumo').textContent = (plan && plan.resumo) || '';
+function aeSetPlan(plan){
+  aePlanData = plan;
+  aeEdit = [];
+  if (plan){
+    (plan.plano || []).forEach(function(p){ aeEdit.push(Object.assign({}, p, { dentro: true })); });
+    (plan.fora || []).forEach(function(p){ aeEdit.push(Object.assign({}, p, { dentro: false, fala: '' })); });
+  }
+  aeRenderPlan();
+}
+
+function aeEditDirty(){
+  if (!aePlanData) return false;
+  var now = aeEdit.filter(function(c){ return c.dentro; }).map(function(c){ return c.indice; }).join(',');
+  var was = (aePlanData.plano || []).map(function(c){ return c.indice; }).join(',');
+  return now !== was;
+}
+
+function aeMove(pos, delta){
+  var inside = aeEdit.filter(function(c){ return c.dentro; });
+  var outside = aeEdit.filter(function(c){ return !c.dentro; });
+  var j = pos + delta;
+  if (j < 0 || j >= inside.length) return;
+  var t = inside[pos]; inside[pos] = inside[j]; inside[j] = t;
+  aeEdit = inside.concat(outside);
+  aeRenderPlan(pos + delta);
+}
+function aeToggle(indice, dentro){
+  var inside = aeEdit.filter(function(c){ return c.dentro; });
+  if (!dentro && inside.length <= 1) return;
+  var item = aeEdit.filter(function(c){ return c.indice === indice; })[0];
+  if (!item) return;
+  item.dentro = dentro;
+  if (dentro){
+    // recolocada entra no fim
+    aeEdit = aeEdit.filter(function(c){ return c !== item; });
+    var ins = aeEdit.filter(function(c){ return c.dentro; });
+    var out = aeEdit.filter(function(c){ return !c.dentro; });
+    aeEdit = ins.concat([item], out);
+  } else {
+    var ins2 = aeEdit.filter(function(c){ return c.dentro; });
+    var out2 = aeEdit.filter(function(c){ return !c.dentro; });
+    aeEdit = ins2.concat(out2);
+  }
+  aeRenderPlan();
+}
+
+function aeRenderPlan(focusPos){
+  var plan = aePlanData;
+  el('aePlan').hidden = !plan;
+  if (!plan) return;
+  el('aeResumo').textContent = plan.resumo || '';
+  var inside = aeEdit.filter(function(c){ return c.dentro; });
+  var outside = aeEdit.filter(function(c){ return !c.dentro; });
+  var dirty = aeEditDirty();
+  var total = inside.reduce(function(s, c){ return s + (c.fim - c.inicio) + (c.hold || 0); }, 0);
+  el('aeMeta').textContent = inside.length + (inside.length === 1 ? ' cena' : ' cenas') + ' · ' + aeSec(dirty ? total : (plan.duracaoFinal || total))
+    + (plan.comLocucao ? ' · com locução' : '') + (plan.ajustadaPeloCorretor && !dirty ? ' · ajustada por você' : '');
+
   var tl = el('aeTimeline'); tl.innerHTML = '';
-  var ol = el('aeShots'); ol.innerHTML = '';
-  if (!plan){ el('aeMeta').textContent = ''; return; }
-  el('aeMeta').textContent = (plan.plano || []).length + ' cortes · ' + aeSec(plan.duracaoFinal || 0) + (plan.comLocucao ? ' · com locução' : '') + ' · IA ≈ US$ ' + (plan.custoUSD || 0).toFixed(3).replace('.', ',');
-  (plan.plano || []).forEach(function(p, i){
-    var dur = p.fim - p.inicio;
+  inside.forEach(function(p, i){
+    var dur = (p.fim - p.inicio) + (p.hold || 0);
     var seg = document.createElement('div');
     seg.style.flex = String(Math.max(dur, 0.1));
-    seg.textContent = i === 0 ? 'hook' : aeSec(dur);
+    seg.textContent = i === 0 ? 'abertura' : aeSec(dur);
     seg.title = (p.ambiente || p.nome) + ' · ' + aeSec(dur);
     tl.appendChild(seg);
+  });
+
+  var ol = el('aeShots'); ol.innerHTML = '';
+  function btn(label, aria, fn, disabled){
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'mini-btn'; b.textContent = label;
+    if (aria) b.setAttribute('aria-label', aria);
+    b.disabled = !!disabled || aeBusy;
+    b.addEventListener('click', fn);
+    return b;
+  }
+  inside.forEach(function(p, i){
     var li = document.createElement('li');
     var n = document.createElement('span'); n.className = 'n'; n.textContent = String(i + 1);
-    var t = document.createElement('span'); t.className = 't'; t.textContent = (p.ambiente || p.nome) + (i === 0 ? ' · hook' : '');
-    var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = aeSec(p.inicio) + '–' + aeSec(p.fim);
-    var w = document.createElement('span'); w.className = 'w'; w.textContent = p.motivo || p.nome;
+    var t = document.createElement('span'); t.className = 't'; t.textContent = (p.ambiente || p.nome) + (i === 0 ? ' · cena de abertura' : '');
+    var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = aeSec((p.fim - p.inicio) + (p.hold || 0));
     li.append(n, t, tm);
-    if (plan.comLocucao && p.fala){
+    if (plan.comLocucao && p.fala && !dirty){
       var fl = document.createElement('span'); fl.className = 'fala'; fl.textContent = '“' + p.fala + '”';
       li.appendChild(fl);
     }
-    li.appendChild(w);
+    if (p.motivo){
+      var w = document.createElement('span'); w.className = 'w'; w.textContent = p.motivo;
+      li.appendChild(w);
+    }
+    var ctl = document.createElement('div'); ctl.className = 'ctl';
+    var nome = p.ambiente || p.nome;
+    ctl.append(
+      btn('↑ Subir', 'Subir a cena ' + nome, function(){ aeMove(i, -1); }, i === 0),
+      btn('↓ Descer', 'Descer a cena ' + nome, function(){ aeMove(i, 1); }, i === inside.length - 1),
+      btn('Tirar', 'Tirar a cena ' + nome, function(){ aeToggle(p.indice, false); }, inside.length <= 1)
+    );
+    li.appendChild(ctl);
     ol.appendChild(li);
   });
-  (plan.fora || []).forEach(function(p){
+  outside.forEach(function(p){
     var li = document.createElement('li'); li.className = 'out';
     var n = document.createElement('span'); n.className = 'n'; n.textContent = '–';
     var t = document.createElement('span'); t.className = 't'; t.textContent = 'Fora: ' + (p.ambiente || p.nome);
-    var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = p.nome;
-    var w = document.createElement('span'); w.className = 'w'; w.textContent = p.motivo || '';
-    li.append(n, t, tm, w); ol.appendChild(li);
+    var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = aeSec(p.fim - p.inicio);
+    li.append(n, t, tm);
+    if (p.motivo){
+      var w = document.createElement('span'); w.className = 'w'; w.textContent = p.motivo;
+      li.appendChild(w);
+    }
+    var ctl = document.createElement('div'); ctl.className = 'ctl';
+    ctl.append(btn('Recolocar', 'Recolocar a cena ' + (p.ambiente || p.nome), function(){ aeToggle(p.indice, true); }));
+    li.appendChild(ctl);
+    ol.appendChild(li);
   });
+  el('aeRemontarBtn').hidden = !dirty;
+  el('aeRemontarBtn').disabled = aeBusy;
+  if (focusPos != null){
+    var target = ol.children[focusPos];
+    if (target){ var b = target.querySelector('.mini-btn:not(:disabled)'); if (b) b.focus(); }
+  }
+}
+
+// resposta de montar/remontar: prévia leve + plano + id da montagem guardada
+function aeHandleResult(xhr, withVoice, wasRemontar){
+  aeSetProgress(1);
+  setTimeout(function(){ aeSetProgress(null); }, 1200);
+  aeResultFile = new File([xhr.response], 'giovani-montagem-previa.mp4', { type: 'video/mp4' });
+  aeMontagemId = xhr.getResponseHeader('X-Autoedit-Id') || null;
+  aeResultHasVoice = withVoice;
+  var plan = aeDecodePlan(xhr.getResponseHeader('X-Autoedit-Plan'));
+  aeListenReset();
+  if (mode === 'autoedit') loadVideoIntoPreview(aeResultFile);
+  aeSetPlan(plan);
+  el('aeListenBtn').hidden = !withVoice;
+  if (wasRemontar){
+    aeSetStatus('Pronto, refiz com os seus ajustes. Confira na prévia.', 'ok');
+  } else {
+    aeSetStatus(withVoice
+      ? 'Vídeo montado no tempo da locução. Toque em “Ouvir a prévia” e depois em “Gerar vídeo final” pra sair com a arte.'
+      : 'Vídeo montado. Confira na prévia e toque em “Gerar vídeo final” pra sair com a arte.', 'ok');
+  }
+  return plan;
+}
+
+function aeFinishBusy(){
+  aeBusy = false;
+  el('aeInput').disabled = false;
+  aeSetBtn('Montar vídeo com IA', false);
+  aeRefreshBtn();
+  if (aePlanData) aeRenderPlan();
 }
 
 aeRunBtn.addEventListener('click', function(){
@@ -1453,9 +1967,15 @@ aeRunBtn.addEventListener('click', function(){
   el('aeInput').disabled = true;
   aeSetBtn('Montando…', true);
   aeSetProgress(0);
-  aeSetStatus('Enviando os clipes…');
+  aeSetStatus('Enviando os vídeos…');
+  var t0 = Date.now();
 
   var form = new FormData();
+  // contexto pra IA escolher o percurso certo (texto curto, sem dado pessoal)
+  var loc = splitLocalizacaoValue(el('localizacao').value || '');
+  form.append('tipoImovel', el('tipo').value.trim());
+  form.append('anuncio', anuncio);
+  form.append('bairro', loc.bairro || '');
   aeClips.forEach(function(f){ form.append('clips', f, f.name); });
   var withVoice = !!voiceBlob;
   if (withVoice) form.append('voice', voiceBlob, voiceName);
@@ -1469,47 +1989,83 @@ aeRunBtn.addEventListener('click', function(){
   xhr.upload.onload = function(){
     aeSetProgress(0.65);
     aeSetStatus(withVoice
-      ? 'A IA está ouvindo a locução e montando os cortes no tempo da fala… (~30 a 90s)'
-      : 'A IA está assistindo os clipes e montando a edição… (~30 a 60s)');
+      ? 'A IA está ouvindo a locução e montando os cortes no tempo da fala… (uns 30 a 90 segundos)'
+      : 'A IA está assistindo os vídeos e montando a edição… (uns 30 a 60 segundos)');
   };
-  function finish(){
-    aeBusy = false;
-    el('aeInput').disabled = false;
-    aeSetBtn('Montar vídeo com IA', false);
-    aeRefreshBtn();
-  }
   xhr.onload = function(){
-    finish();
+    aeFinishBusy();
     if (xhr.status !== 200){
-      var r = new FileReader();
-      r.onload = function(){
-        var msg = '';
-        try { msg = JSON.parse(r.result).error || ''; } catch (e) {}
+      readXhrError(xhr).then(function(msg){
         aeSetProgress(null);
         aeSetStatus(msg || ('O servidor respondeu ' + xhr.status + '. Tenta de novo.'), 'error');
-      };
-      r.readAsText(xhr.response);
+        track('montagem', { ok: false, voz: withVoice, n: aeClips.length });
+        track('erro', { onde: 'montagem', msg: String(msg).slice(0, 60) });
+      });
       return;
     }
-    aeSetProgress(1);
-    setTimeout(function(){ aeSetProgress(null); }, 1200);
-    aeResultFile = new File([xhr.response], 'giovani-autoedit.mp4', { type: 'video/mp4' });
-    aeResultHasVoice = withVoice;
-    aeVoiceStale = false;
-    if (mode === 'autoedit') loadVideoIntoPreview(aeResultFile);
-    aeRenderPlan(aeDecodePlan(xhr.getResponseHeader('X-Autoedit-Plan')));
-    el('aeListenBtn').hidden = !withVoice;
-    aeSetStatus(withVoice
-      ? 'Vídeo montado no tempo da locução. Toque em “Ouvir a prévia” e depois em “Gerar vídeo final” pra sair com a arte.'
-      : 'Vídeo montado. Confira na prévia e toque em “Gerar vídeo final” pra sair com a arte.', 'ok');
+    var plan = aeHandleResult(xhr, withVoice, false);
+    track('montagem', { ok: true, voz: withVoice, n: aeClips.length, cortes: plan && plan.plano ? plan.plano.length : 0, seg: (Date.now() - t0) / 1000 });
   };
-  xhr.onerror = function(){ finish(); aeSetProgress(null); aeSetStatus('Falha de conexão com o servidor. Confere a internet e tenta de novo.', 'error'); };
-  xhr.ontimeout = function(){ finish(); aeSetProgress(null); aeSetStatus('Demorou demais. Tenta com menos clipes ou clipes mais curtos.', 'error'); };
+  xhr.onerror = function(){ aeFinishBusy(); aeSetProgress(null); aeSetStatus('Falha de conexão com o servidor. Confere a internet e tenta de novo.', 'error'); track('montagem', { ok: false, voz: withVoice, erro: 'conexao' }); };
+  xhr.ontimeout = function(){ aeFinishBusy(); aeSetProgress(null); aeSetStatus('Demorou demais. Tenta com menos vídeos ou vídeos mais curtos.', 'error'); track('montagem', { ok: false, voz: withVoice, erro: 'timeout' }); };
   xhr.send(form);
 });
 
+el('aeRemontarBtn').addEventListener('click', function(){
+  if (aeBusy || !aeMontagemId) return;
+  var cortes = aeEdit.filter(function(c){ return c.dentro; }).map(function(c){ return { indice: c.indice, inicio: c.inicio, fim: c.fim }; });
+  if (!cortes.length) return;
+  aeBusy = true;
+  aeRefreshBtn();
+  aeRenderPlan();
+  el('aeInput').disabled = true;
+  el('aeRemontarBtn').textContent = 'Refazendo…';
+  aeSetProgress(0.3);
+  aeSetStatus('Refazendo a montagem com os seus ajustes… (uns 10 a 30 segundos)');
+  var withVoice = aeResultHasVoice;
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', REMONTAR_ENDPOINT);
+  xhr.responseType = 'blob';
+  xhr.timeout = 6 * 60 * 1000;
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  function done(){
+    el('aeRemontarBtn').textContent = 'Refazer com meus ajustes';
+    aeFinishBusy();
+  }
+  xhr.onload = function(){
+    done();
+    if (xhr.status !== 200){
+      readXhrError(xhr).then(function(msg){
+        aeSetProgress(null);
+        track('remontagem', { ok: false });
+        if (xhr.status === 410){ aeInvalidate(msg); aeSetStatus(msg, 'error'); return; }
+        aeSetStatus(msg || 'Não consegui refazer. Tenta de novo.', 'error');
+      });
+      return;
+    }
+    aeHandleResult(xhr, withVoice, true);
+    track('remontagem', { ok: true, cortes: cortes.length });
+  };
+  xhr.onerror = function(){ done(); aeSetProgress(null); aeSetStatus('Falha de conexão com o servidor. Tenta de novo.', 'error'); track('remontagem', { ok: false }); };
+  xhr.ontimeout = function(){ done(); aeSetProgress(null); aeSetStatus('Demorou demais. Tenta de novo.', 'error'); track('remontagem', { ok: false }); };
+  xhr.send(JSON.stringify({ id: aeMontagemId, cortes: cortes }));
+});
+
 el('aeRawBtn').addEventListener('click', function(){
-  if (aeResultFile) downloadBlob(aeResultFile, 'giovani-' + fileBaseName() + '-montagem.mp4');
+  if (!aeMontagemId){ if (aeResultFile) downloadBlob(aeResultFile, 'giovani-' + fileBaseName() + '-montagem.mp4'); return; }
+  var b = this;
+  b.disabled = true;
+  aeSetStatus('Baixando a montagem em qualidade cheia…');
+  fetch(SERVER + '/montagem/' + encodeURIComponent(aeMontagemId)).then(function(r){
+    if (!r.ok) return r.json().catch(function(){ return {}; }).then(function(j){ var e = new Error(j.error || ('Erro ' + r.status)); e.status = r.status; throw e; });
+    return r.blob();
+  }).then(function(blob){
+    downloadBlob(blob, 'giovani-' + fileBaseName() + '-montagem-sem-arte.mp4');
+    aeSetStatus('Download da montagem sem a arte iniciado.', 'ok');
+  }).catch(function(err){
+    if (err.status === 410){ aeInvalidate(err.message); aeSetStatus(err.message, 'error'); return; }
+    aeSetStatus('Não deu pra baixar (' + err.message + '). Tenta de novo.', 'error');
+  }).finally(function(){ b.disabled = false; });
 });
 
 
@@ -1522,7 +2078,6 @@ var voiceTimerId = null;
 var voiceStartedAt = 0;
 var voiceUrl = null;
 var aeResultHasVoice = false;
-var aeVoiceStale = false;
 var VOICE_MAX_SECONDS = 120;
 
 function voiceShow(state){
@@ -1535,13 +2090,12 @@ function voiceFmt(sec){
   return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
 }
 function voiceMarkChanged(){
-  // a montagem atual foi feita com outra locução (ou sem): avisa pra montar de novo
-  if (aeResultFile){
-    aeVoiceStale = true;
-    aeSetStatus('A locução mudou. Toque em “Montar vídeo com IA” de novo pra encaixar os cortes nela.');
-  }
+  // a montagem atual foi feita com outra locução (ou sem): não vale mais
+  aeInvalidate('A locução mudou. Toque em “Montar vídeo com IA” de novo pra encaixar os cortes nela.');
+  draftSaveVoice();
 }
-function voiceSet(blob, name, knownSeconds){
+function voiceSet(blob, name, knownSeconds, silent){
+  var hadMontagem = !!(aeResultFile || aeMontagemId);
   voiceBlob = blob;
   voiceName = name;
   if (voiceUrl) URL.revokeObjectURL(voiceUrl);
@@ -1555,7 +2109,8 @@ function voiceSet(blob, name, knownSeconds){
     }
   };
   voiceShow('ready');
-  voiceMarkChanged();
+  if (!silent) voiceMarkChanged();
+  return hadMontagem;
 }
 function voiceClear(){
   voiceBlob = null;
@@ -1606,8 +2161,12 @@ async function voiceStart(){
       aeSetStatus('A gravação ficou vazia. Tente de novo.', 'error');
       return;
     }
-    voiceSet(blob, 'locucao.' + ext, (Date.now() - voiceStartedAt) / 1000);
-    aeSetStatus('Locução gravada. Ouça pra conferir e toque em “Montar vídeo com IA”.');
+    var secs = (Date.now() - voiceStartedAt) / 1000;
+    var refazer = voiceSet(blob, 'locucao.' + ext, secs);
+    aeSetStatus(refazer
+      ? 'Locução nova gravada. Toque em “Montar vídeo com IA” de novo pra encaixar os cortes nela.'
+      : 'Locução gravada. Ouça pra conferir e toque em “Montar vídeo com IA”.');
+    track('locucao', { origem: 'gravada', seg: Math.round(secs) });
   };
   voiceRecorder.start(250);
   voiceStartedAt = Date.now();
@@ -1627,21 +2186,249 @@ el('voiceStopBtn').addEventListener('click', function(){
 });
 el('voiceRedoBtn').addEventListener('click', function(){ voiceClear(); voiceStart(); });
 el('voiceRemoveBtn').addEventListener('click', function(){
+  var had = !!aeResultFile;
   voiceClear();
-  aeSetStatus(aeResultFile ? 'Locução removida. Monte de novo pra tirar a voz do vídeo.' : 'Locução removida.');
+  aeSetStatus(had ? 'Locução removida. Monte de novo pra sair sem a voz.' : 'Locução removida.');
 });
 el('voiceFile').addEventListener('change', function(){
   var f = this.files && this.files[0];
   this.value = '';
   if (!f) return;
   if (f.size > 30 * 1024 * 1024){ aeSetStatus('Esse áudio passou de 30 MB. Envie um arquivo menor.', 'error'); return; }
-  voiceSet(f, f.name || 'locucao');
-  aeSetStatus('Áudio carregado. Ouça pra conferir e toque em “Montar vídeo com IA”.');
+  var refazer = voiceSet(f, f.name || 'locucao');
+  aeSetStatus(refazer
+    ? 'Locução nova carregada. Toque em “Montar vídeo com IA” de novo pra encaixar os cortes nela.'
+    : 'Áudio carregado. Ouça pra conferir e toque em “Montar vídeo com IA”.');
+  track('locucao', { origem: 'arquivo', mb: Math.round(f.size / 1048576) });
 });
 
+// "Ouvir a prévia": abre a prévia, rola até ela e vira "Pausar"
+var aeListening = false;
+var aeListenFresh = true;
+function aeListenReset(){
+  aeListening = false;
+  aeListenFresh = true;
+  var b = el('aeListenBtn');
+  if (b) b.textContent = 'Ouvir a prévia com a locução';
+}
 el('aeListenBtn').addEventListener('click', function(){
   if (mode !== 'autoedit' || !aeResultFile) return;
+  if (aeListening && !videoEl.paused){
+    videoEl.pause();
+    return;
+  }
+  previewSetCollapsed(false);
+  stageEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   videoEl.muted = false;
-  videoEl.currentTime = 0;
-  videoEl.play().catch(function(){});
+  if (aeListenFresh) videoEl.currentTime = 0;
+  aeListenFresh = false;
+  aeListening = true;
+  this.textContent = 'Pausar';
+  videoEl.play().catch(function(){ aeListenReset(); });
+  track('ouvir_previa', {});
 });
+videoEl.addEventListener('pause', function(){
+  if (!aeListening) return;
+  aeListening = false;
+  videoEl.muted = true;
+  el('aeListenBtn').textContent = 'Continuar ouvindo';
+});
+
+
+// ======================= métricas de uso (anônimas) =======================
+// Um id aleatório por aparelho e outro por visita — sem nome, e-mail ou
+// dado do imóvel. O servidor junta tudo no painel.
+var EVENTS_ENDPOINT = SERVER + '/events';
+var evQueue = [];
+var evTimer = null;
+var evDevice = (function(){
+  try {
+    var d = localStorage.getItem('sg_dev');
+    if (!d){ d = newId(); localStorage.setItem('sg_dev', d); }
+    return d;
+  } catch (e) { return 'sem-armazenamento'; }
+})();
+var evSession = newId();
+var evDev = isTouch ? 'mobile' : 'desktop';
+
+function track(name, props){
+  if (window.__SG_NO_EVENTS) return;
+  evQueue.push({ e: name, p: props || {} });
+  if (evQueue.length >= 20) evFlush(false);
+  else if (!evTimer) evTimer = setTimeout(function(){ evFlush(false); }, 4000);
+}
+function evFlush(leaving){
+  clearTimeout(evTimer);
+  evTimer = null;
+  if (!evQueue.length) return;
+  var body = JSON.stringify({ d: evDevice, s: evSession, dev: evDev, ev: evQueue.splice(0, 40) });
+  try {
+    if (leaving && navigator.sendBeacon){
+      navigator.sendBeacon(EVENTS_ENDPOINT, new Blob([body], { type: 'text/plain' }));
+      return;
+    }
+    fetch(EVENTS_ENDPOINT, { method: 'POST', body: body, headers: { 'Content-Type': 'text/plain' }, keepalive: true }).catch(function(){});
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'hidden') evFlush(true); });
+window.addEventListener('pagehide', function(){ evFlush(true); });
+window.addEventListener('error', function(e){
+  track('erro', { onde: 'js', msg: String((e && e.message) || '').slice(0, 60) });
+});
+
+
+// ======================= rascunho (não perder nada ao recarregar) =======================
+// Os dados do formulário vão pro localStorage; a foto, o vídeo (até 150 MB)
+// e a locução vão pro IndexedDB do próprio navegador. Os vídeos da montagem
+// automática não são guardados (são muitos e grandes).
+var DRAFT_KEY = 'sg_rascunho_v1';
+var DRAFT_MAX_VIDEO = 150 * 1024 * 1024;
+var DRAFT_MAX_PHOTO = 40 * 1024 * 1024;
+var draftTimer = null;
+var draftRestoring = false;
+
+function draftSnapshot(){
+  var fields = {};
+  FIELD_KEYS.forEach(function(k){ fields[k] = { on: el('tg_' + k).checked, value: el(k).value }; });
+  return {
+    v: 1, t: Date.now(), mode: mode, anuncio: anuncio, fields: fields,
+    variant: document.querySelector('#variantSeg button[aria-pressed="true"]').getAttribute('data-variant'),
+    artStyle: artStyle, fotoFormat: fotoFormat
+  };
+}
+function draftSaveSoon(){
+  if (draftRestoring) return;
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(function(){
+    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draftSnapshot())); } catch (e) {}
+  }, 500);
+}
+
+var idbPromise = null;
+function idb(){
+  if (idbPromise) return idbPromise;
+  idbPromise = new Promise(function(resolve){
+    try {
+      var req = indexedDB.open('sg-studio', 1);
+      req.onupgradeneeded = function(){ req.result.createObjectStore('arquivos'); };
+      req.onsuccess = function(){ resolve(req.result); };
+      req.onerror = function(){ resolve(null); };
+      req.onblocked = function(){ resolve(null); };
+    } catch (e) { resolve(null); }
+  });
+  return idbPromise;
+}
+function idbOp(modeRW, fn){
+  return idb().then(function(db){
+    if (!db) return null;
+    return new Promise(function(resolve){
+      try {
+        var tx = db.transaction('arquivos', modeRW);
+        var store = tx.objectStore('arquivos');
+        var req = fn(store);
+        tx.oncomplete = function(){ resolve(req && 'result' in req ? req.result : null); };
+        tx.onerror = function(){ resolve(null); };
+        tx.onabort = function(){ resolve(null); };
+      } catch (e) { resolve(null); }
+    });
+  });
+}
+function draftSaveFile(key, file){
+  if (draftRestoring) return;
+  if (!file){ idbOp('readwrite', function(st){ return st.delete(key); }); return; }
+  idbOp('readwrite', function(st){ return st.put({ blob: file, name: file.name || key, type: file.type || '' }, key); });
+}
+function draftSaveVoice(){
+  if (draftRestoring) return;
+  if (voiceBlob) idbOp('readwrite', function(st){ return st.put({ blob: voiceBlob, name: voiceName, type: voiceBlob.type || '' }, 'voz'); });
+  else idbOp('readwrite', function(st){ return st.delete('voz'); });
+}
+function asFile(rec){
+  if (!rec || !rec.blob) return null;
+  try { return new File([rec.blob], rec.name || 'arquivo', { type: rec.type || rec.blob.type || '' }); } catch (e) { return rec.blob; }
+}
+
+async function draftRestore(){
+  var d = null;
+  try { d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) {}
+  var fotoRec = await idbOp('readonly', function(st){ return st.get('foto'); });
+  var videoRec = await idbOp('readonly', function(st){ return st.get('video'); });
+  var vozRec = await idbOp('readonly', function(st){ return st.get('voz'); });
+  var typed = false;
+  if (d && d.v === 1 && d.fields){
+    FIELD_KEYS.forEach(function(k){ var f = d.fields[k]; if (f && f.value && !(k === 'status' && /^(À VENDA|ALUGA-SE|VENDIDO|TEMPORADA)$/.test(f.value))) typed = true; });
+  }
+  if (!typed && !fotoRec && !videoRec && !vozRec) return;
+
+  draftRestoring = true;
+  try {
+    if (d && d.v === 1){
+      applyAnuncio(d.anuncio || 'venda', false);
+      FIELD_KEYS.forEach(function(k){
+        var f = d.fields && d.fields[k];
+        if (!f) return;
+        el(k).value = f.value || '';
+        el('tg_' + k).checked = f.on !== false;
+      });
+      syncToggleRows();
+      if (d.variant) document.querySelectorAll('#variantSeg button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-variant') === d.variant)); });
+      if (d.artStyle === 'editorial' || d.artStyle === 'classic'){
+        artStyle = d.artStyle;
+        document.querySelectorAll('#styleSeg button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-style') === artStyle)); });
+      }
+      if (d.fotoFormat === '1:1' || d.fotoFormat === '9:16'){
+        fotoFormat = d.fotoFormat;
+        document.querySelectorAll('#formatSeg button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-format') === fotoFormat)); });
+      }
+      var urlModo = null;
+      try { urlModo = new URLSearchParams(location.search).get('modo'); } catch (e) {}
+      if (!urlModo && (d.mode === 'video' || d.mode === 'foto' || d.mode === 'autoedit')){
+        mode = d.mode;
+        document.querySelectorAll('#modeSeg button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === mode)); });
+      }
+      applyMode();
+    }
+    var vf = asFile(videoRec);
+    if (vf) setVideoTabFile(vf, true);
+    var ff = asFile(fotoRec);
+    if (ff) loadPhotoFile(ff, true);
+    if (vozRec && vozRec.blob) voiceSet(vozRec.blob, vozRec.name || 'locucao', null, true);
+    render();
+  } finally {
+    draftRestoring = false;
+  }
+  var msg = 'Recuperamos o que você estava fazendo.';
+  if (mode === 'autoedit') msg += ' Os vídeos da montagem precisam ser escolhidos de novo' + (vozRec ? ' (a locução ficou guardada).' : '.');
+  el('draftMsg').textContent = msg;
+  el('draftBar').hidden = false;
+  track('rascunho_restaurado', { aba: mode, foto: !!fotoRec, video: !!videoRec, voz: !!vozRec });
+}
+
+el('draftDiscardBtn').addEventListener('click', function(){
+  track('rascunho_descartado', {});
+  evFlush(true);
+  try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  idbOp('readwrite', function(st){ return st.clear(); }).then(function(){
+    location.href = location.pathname;
+  });
+});
+
+
+// ======================= prévia no celular (fixa no topo, dá pra esconder) =======================
+function previewSetCollapsed(collapsed){
+  el('previewWrap').classList.toggle('collapsed', collapsed);
+  var b = el('previewToggleBtn');
+  b.textContent = collapsed ? 'Mostrar prévia' : 'Esconder prévia';
+  b.setAttribute('aria-expanded', String(!collapsed));
+  if (!collapsed && mode === 'foto') requestAnimationFrame(updatePhotoTransform);
+}
+el('previewToggleBtn').addEventListener('click', function(){
+  previewSetCollapsed(!el('previewWrap').classList.contains('collapsed'));
+});
+
+
+// ======================= início =======================
+applyAnuncio('venda', false);
+boot();
+track('app_aberto', { aba: mode, largura: window.innerWidth });
+draftRestore().catch(function(err){ console.error('[Studio Giovani] rascunho:', err); draftRestoring = false; });
