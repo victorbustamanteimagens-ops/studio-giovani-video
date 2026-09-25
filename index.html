@@ -79,7 +79,7 @@
   .tab:focus-visible{outline:2px solid var(--focus); outline-offset:1px;}
   .tab[aria-pressed="true"]{background:var(--surface); color:var(--text); box-shadow:var(--shadow);}
 
-  .chips{display:grid; grid-template-columns:repeat(3, 1fr); gap:8px}
+  .chips{display:grid; grid-template-columns:repeat(2, 1fr); gap:8px}
   .chip{font:inherit; font-size:15px; font-weight:600; min-height:44px; padding:8px 6px; border-radius:10px; border:2px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer}
   .chip[aria-pressed="true"]{border-color:var(--accent); background:var(--surface); font-weight:700}
   .chip:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
@@ -341,14 +341,12 @@
     </fieldset>
 
     <fieldset>
-      <legend>Tipo de anúncio</legend>
+      <legend>Etiqueta do anúncio</legend>
       <div class="chips" id="anuncioSeg" role="group" aria-label="Tipo de anúncio">
-        <button type="button" class="chip" data-anuncio="venda" aria-pressed="true">Venda</button>
-        <button type="button" class="chip" data-anuncio="aluguel" aria-pressed="false">Aluguel</button>
-        <button type="button" class="chip" data-anuncio="vendido" aria-pressed="false">Vendido</button>
-        <button type="button" class="chip" data-anuncio="comercial" aria-pressed="false">Comercial</button>
-        <button type="button" class="chip" data-anuncio="rural" aria-pressed="false">Rural</button>
-        <button type="button" class="chip" data-anuncio="temporada" aria-pressed="false">Temporada</button>
+        <button type="button" class="chip" data-anuncio="venda" aria-pressed="true">À VENDA</button>
+        <button type="button" class="chip" data-anuncio="aluguel" aria-pressed="false">ALUGA-SE</button>
+        <button type="button" class="chip" data-anuncio="vendido" aria-pressed="false">VENDIDO</button>
+        <button type="button" class="chip" data-anuncio="comercial" aria-pressed="false">COMERCIAL</button>
       </div>
     </fieldset>
 
@@ -361,14 +359,14 @@
           <input type="text" id="localizacao" placeholder="Ex.: Icaraí, Niterói" autocomplete="off">
         </div>
       </div>
-      <div class="toggle-row" data-toggle-row="tipo">
+      <div class="toggle-row" data-toggle-row="tipo" hidden>
         <label class="check" for="tg_tipo"><input type="checkbox" id="tg_tipo" checked aria-label="Mostrar tipo do imóvel na arte"></label>
         <div class="toggle-field">
           <label class="toggle-label" for="tipo">Tipo do imóvel</label>
           <input type="text" id="tipo" placeholder="Ex.: Apartamento" autocomplete="off">
         </div>
       </div>
-      <div class="toggle-row" data-toggle-row="status">
+      <div class="toggle-row" data-toggle-row="status" hidden>
         <label class="check" for="tg_status"><input type="checkbox" id="tg_status" checked aria-label="Mostrar etiqueta na arte"></label>
         <div class="toggle-field">
           <label class="toggle-label" for="status">Etiqueta</label>
@@ -389,8 +387,8 @@
       <div class="toggle-row" data-toggle-row="area">
         <label class="check" for="tg_area"><input type="checkbox" id="tg_area" checked aria-label="Mostrar área na arte"></label>
         <div class="toggle-field">
-          <label class="toggle-label" for="area">Área</label>
-          <input type="text" id="area" placeholder="Ex.: 98 m²" autocomplete="off">
+          <label class="toggle-label" for="area">Área <span class="opt">(o m² entra sozinho)</span></label>
+          <input type="text" id="area" placeholder="Ex.: 98" inputmode="decimal" autocomplete="off">
         </div>
       </div>
       <div class="toggle-row" data-toggle-row="quartos">
@@ -482,6 +480,6 @@
   </div>
 </dialog>
 
-<script type="module" src="./app.js?v=8"></script>
+<script type="module" src="./app.js?v=9"></script>
 </body>
 </html>

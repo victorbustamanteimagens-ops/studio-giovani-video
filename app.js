@@ -67,12 +67,10 @@ function setProgress(pct){
 // Cada tipo preenche a etiqueta e troca os exemplos dos campos. O valor de
 // aluguel/temporada ganha o "/mês" ou "/diária" sozinho se o corretor não pôs.
 var ANUNCIOS = {
-  venda:     { tag: 'À VENDA',  valorPh: 'Ex.: R$ 780.000',      tipoPh: 'Ex.: Apartamento',     areaPh: 'Ex.: 98 m²',        quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos', valorReq: true },
-  aluguel:   { tag: 'ALUGA-SE', valorPh: 'Ex.: R$ 3.500',        tipoPh: 'Ex.: Apartamento',     areaPh: 'Ex.: 98 m²',        quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos', valorReq: true, sufixo: '/mês' },
-  vendido:   { tag: 'VENDIDO',  valorPh: 'Opcional',             tipoPh: 'Ex.: Apartamento',     areaPh: 'Ex.: 98 m²',        quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos', valorReq: false },
-  comercial: { tag: 'À VENDA',  valorPh: 'Ex.: R$ 450.000',      tipoPh: 'Ex.: Sala comercial',  areaPh: 'Ex.: 42 m²',        quartosLabel: 'Salas / ambientes', quartosPh: 'Ex.: 2 salas + copa', valorReq: true },
-  rural:     { tag: 'À VENDA',  valorPh: 'Ex.: R$ 1.200.000',    tipoPh: 'Ex.: Sítio',           areaPh: 'Ex.: 2 hectares',   quartosLabel: 'Quartos', quartosPh: 'Ex.: casa com 3 quartos', valorReq: true },
-  temporada: { tag: 'TEMPORADA', valorPh: 'Ex.: R$ 450',         tipoPh: 'Ex.: Casa de praia',   areaPh: 'Ex.: 120 m²',       quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos, até 8 pessoas', valorReq: true, sufixo: '/diária' }
+  venda:     { tag: 'À VENDA',   nome: 'À VENDA',   valorPh: 'Ex.: R$ 780.000', quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos', valorReq: true },
+  aluguel:   { tag: 'ALUGA-SE',  nome: 'ALUGA-SE',  valorPh: 'Ex.: R$ 3.500',   quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos', valorReq: true, sufixo: '/mês' },
+  vendido:   { tag: 'VENDIDO',   nome: 'VENDIDO',   valorPh: 'Opcional',        quartosLabel: 'Quartos', quartosPh: 'Ex.: 3 quartos', valorReq: false },
+  comercial: { tag: 'COMERCIAL', nome: 'COMERCIAL', valorPh: 'Ex.: R$ 450.000', quartosLabel: 'Salas / ambientes', quartosPh: 'Ex.: 2 salas + copa', valorReq: true }
 };
 var anuncio = 'venda';
 function anuncioCfg(){ return ANUNCIOS[anuncio] || ANUNCIOS.venda; }
@@ -94,8 +92,7 @@ function applyAnuncio(key, fromUser){
     syncToggleRows();
   }
   el('valor').placeholder = c.valorPh;
-  el('tipo').placeholder = c.tipoPh;
-  el('area').placeholder = c.areaPh;
+  el('status').value = c.tag;
   el('quartos').placeholder = c.quartosPh;
   el('quartosLabel').textContent = c.quartosLabel;
   el('valorReq').hidden = !c.valorReq;
@@ -109,14 +106,21 @@ function syncToggleRows(){
 }
 var FIELD_KEYS = ['localizacao','tipo','status','valor','area','quartos','vagas','destaque'];
 
+// área: o corretor digita só o número e o "m²" entra sozinho
+function areaComM2(v){
+  if (!v) return v;
+  if (/m²|m2|metros|hectare|ha\b|alqueire/i.test(v)) return v.replace(/\s*m2\b/i, ' m²');
+  return v + ' m²';
+}
+
 function readState(){
   return {
     variant: document.querySelector('#variantSeg button[aria-pressed="true"]').getAttribute('data-variant'),
     localizacao: { on: el('tg_localizacao').checked, value: el('localizacao').value.trim() },
-    tipo:        { on: el('tg_tipo').checked, value: el('tipo').value.trim() },
-    status:      { on: el('tg_status').checked, value: el('status').value.trim() },
+    tipo:        { on: false, value: '' },
+    status:      { on: true, value: anuncioCfg().tag },
     valor:       { on: el('tg_valor').checked, value: valorComSufixo(el('valor').value.trim()) },
-    area:        { on: el('tg_area').checked, value: el('area').value.trim() },
+    area:        { on: el('tg_area').checked, value: areaComM2(el('area').value.trim()) },
     quartos:     { on: el('tg_quartos').checked, value: el('quartos').value.trim() },
     vagas:       { on: el('tg_vagas').checked, value: el('vagas').value.trim() },
     destaque:    { on: el('tg_destaque').checked, value: el('destaque').value.trim() }
@@ -1537,9 +1541,8 @@ function openCheckSheet(){
     var b = document.createElement('strong'); b.textContent = value;
     li.append(a, b); ul.appendChild(li);
   }
-  var ANUNCIO_NOMES = { venda: 'Venda', aluguel: 'Aluguel', vendido: 'Vendido', comercial: 'Comercial', rural: 'Rural', temporada: 'Temporada' };
-  row('Anúncio', ANUNCIO_NOMES[anuncio]);
-  ['status', 'valor', 'localizacao', 'tipo', 'area', 'quartos', 'vagas', 'destaque'].forEach(function(k){
+  row('Etiqueta', anuncioCfg().tag);
+  ['valor', 'localizacao', 'area', 'quartos', 'vagas', 'destaque'].forEach(function(k){
     if (st[k].on && st[k].value){
       var label = k === 'quartos' ? el('quartosLabel').textContent : FIELD_NAMES[k];
       row(label, k === 'status' ? st[k].value.toUpperCase() : st[k].value);
@@ -1973,7 +1976,7 @@ aeRunBtn.addEventListener('click', function(){
   var form = new FormData();
   // contexto pra IA escolher o percurso certo (texto curto, sem dado pessoal)
   var loc = splitLocalizacaoValue(el('localizacao').value || '');
-  form.append('tipoImovel', el('tipo').value.trim());
+  form.append('tipoImovel', anuncio === 'comercial' ? 'imóvel comercial' : '');
   form.append('anuncio', anuncio);
   form.append('bairro', loc.bairro || '');
   aeClips.forEach(function(f){ form.append('clips', f, f.name); });
