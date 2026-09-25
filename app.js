@@ -1696,6 +1696,8 @@ function aeSetBtn(label, busy){
 }
 function aeRefreshBtn(){
   aeRunBtn.disabled = aeBusy || aeClips.length < 2 || aeClips.length > AE_MAX;
+  el('aeThumbs').querySelectorAll('.x').forEach(function(b){ b.disabled = aeBusy; });
+  el('aeAddLabel').hidden = !aeClips.length || aeBusy;
   el('aeRemontarBtn').disabled = aeBusy;
 }
 
@@ -1758,9 +1760,16 @@ function aeRenderThumbs(){
     if (aeThumbUrls[i]){ ph.src = aeThumbUrls[i]; ph.alt = ''; }
     var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = (i + 1) + '. ' + f.name;
     li.title = f.name + ' · ' + aeMB(f.size);
-    li.append(ph, nm);
+    var x = document.createElement('button');
+    x.type = 'button'; x.className = 'x';
+    x.setAttribute('aria-label', 'Tirar o vídeo ' + (i + 1) + ' (' + f.name + ')');
+    x.innerHTML = '<span aria-hidden="true">×</span>';
+    x.disabled = aeBusy;
+    x.addEventListener('click', function(){ aeRemoveClip(i); });
+    li.append(ph, nm, x);
     ul.appendChild(li);
   });
+  el('aeAddLabel').hidden = !aeClips.length || aeBusy;
   var sum = el('aeSum');
   sum.innerHTML = '';
   sum.className = 'ae-sum';
@@ -1768,7 +1777,7 @@ function aeRenderThumbs(){
     var bad = aeClips.length < 2 || aeClips.length > AE_MAX;
     if (bad) sum.className = 'ae-sum warn';
     var a = document.createElement('span');
-    a.textContent = aeClips.length > AE_MAX ? aeClips.length + ' vídeos (máximo ' + AE_MAX + ')'
+    a.textContent = aeClips.length > AE_MAX ? aeClips.length + ' vídeos: o máximo é ' + AE_MAX + '. Toque no × pra tirar ' + (aeClips.length - AE_MAX === 1 ? '1' : (aeClips.length - AE_MAX)) + '.'
       : (aeClips.length < 2 ? 'Escolha pelo menos 2 vídeos' : aeClips.length + ' vídeos escolhidos');
     var b = document.createElement('span'); b.textContent = aeMB(total);
     sum.append(a, b);
@@ -1779,14 +1788,51 @@ async function aeLoadThumbs(){
   var my = ++aeThumbToken;
   for (var i = 0; i < aeClips.length; i++){
     if (my !== aeThumbToken) return;
+    if (aeThumbUrls[i]) continue;
     var data = await makeVideoThumb(aeClips[i]);
     if (my !== aeThumbToken) return;
     if (data){ aeThumbUrls[i] = data; aeRenderThumbs(); if (aePlanData) aeRenderPlan(); }
   }
 }
 
+// tirar um vídeo da lista (X na miniatura) sem precisar escolher tudo de novo
+function aeRemoveClip(i){
+  if (aeBusy || i < 0 || i >= aeClips.length) return;
+  aeClips.splice(i, 1);
+  var novo = {};
+  Object.keys(aeThumbUrls).forEach(function(k){
+    var n = Number(k);
+    if (n < i) novo[n] = aeThumbUrls[k];
+    else if (n > i) novo[n - 1] = aeThumbUrls[k];
+  });
+  aeThumbUrls = novo;
+  aeRenderThumbs();
+  aeLoadThumbs();
+  if (!aeClips.length){
+    el('aePickTitle').textContent = 'Toque para escolher os vídeos';
+    el('aeFilename').textContent = 'De 2 a 10 vídeos do mesmo imóvel, do jeito que saíram do celular';
+  }
+  aeInvalidate('Você mudou os vídeos. Toque em “Montar vídeo com IA” de novo.');
+  aeRefreshBtn();
+  var foco = el('aeThumbs').querySelectorAll('.x')[Math.min(i, aeClips.length - 1)];
+  if (foco) foco.focus();
+}
+
+el('aeAddInput').addEventListener('change', function(){
+  var picked = Array.from(this.files || []);
+  this.value = '';
+  if (!picked.length || aeBusy) return;
+  aeClips = aeClips.concat(picked);
+  aeRenderThumbs();
+  aeLoadThumbs();
+  aeInvalidate('Você mudou os vídeos. Toque em “Montar vídeo com IA” de novo.');
+  aeRefreshBtn();
+  track('midia', { tipo: 'clipes', n: aeClips.length, adicionou: picked.length });
+});
+
 el('aeInput').addEventListener('change', function(){
   var picked = Array.from(this.files || []);
+  this.value = '';
   if (!picked.length) return;
   aeClips = picked;
   aeThumbUrls = {};
@@ -1934,13 +1980,23 @@ function aeRenderPlan(focusPos){
 }
 
 // resposta de montar/remontar: prévia leve + plano + id da montagem guardada
-function aeHandleResult(xhr, withVoice, wasRemontar){
-  aeSetProgress(1);
-  setTimeout(function(){ aeSetProgress(null); }, 1200);
+// o plano vem num GET separado (no cabeçalho só quando é pequeno)
+function aeFetchPlan(id){
+  if (!id) return Promise.resolve(null);
+  var base = AUTOEDIT_ENDPOINT.replace(/\/smart$/, '');
+  return fetch(base + '/plano/' + encodeURIComponent(id), { cache: 'no-store' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .catch(function(){ return null; });
+}
+async function aeHandleResult(xhr, withVoice, wasRemontar){
+  aeSetProgress(0.97);
   aeResultFile = new File([xhr.response], 'giovani-montagem-previa.mp4', { type: 'video/mp4' });
   aeMontagemId = xhr.getResponseHeader('X-Autoedit-Id') || null;
   aeResultHasVoice = withVoice;
   var plan = aeDecodePlan(xhr.getResponseHeader('X-Autoedit-Plan'));
+  if (!plan) plan = await aeFetchPlan(aeMontagemId);
+  aeSetProgress(1);
+  setTimeout(function(){ aeSetProgress(null); }, 1200);
   aeListenReset();
   if (mode === 'autoedit') loadVideoIntoPreview(aeResultFile);
   aeSetPlan(plan);
@@ -2006,8 +2062,9 @@ aeRunBtn.addEventListener('click', function(){
       });
       return;
     }
-    var plan = aeHandleResult(xhr, withVoice, false);
-    track('montagem', { ok: true, voz: withVoice, n: aeClips.length, cortes: plan && plan.plano ? plan.plano.length : 0, seg: (Date.now() - t0) / 1000 });
+    aeHandleResult(xhr, withVoice, false).then(function(plan){
+      track('montagem', { ok: true, voz: withVoice, n: aeClips.length, cortes: plan && plan.plano ? plan.plano.length : 0, seg: (Date.now() - t0) / 1000 });
+    });
   };
   xhr.onerror = function(){ aeFinishBusy(); aeSetProgress(null); aeSetStatus('Falha de conexão com o servidor. Confere a internet e tenta de novo.', 'error'); track('montagem', { ok: false, voz: withVoice, erro: 'conexao' }); };
   xhr.ontimeout = function(){ aeFinishBusy(); aeSetProgress(null); aeSetStatus('Demorou demais. Tenta com menos vídeos ou vídeos mais curtos.', 'error'); track('montagem', { ok: false, voz: withVoice, erro: 'timeout' }); };

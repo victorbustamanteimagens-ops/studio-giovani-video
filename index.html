@@ -87,9 +87,13 @@
   /* montagem automática */
   .ae-thumbs{list-style:none; margin:0; padding:0; display:grid; grid-template-columns:repeat(auto-fill, minmax(62px, 1fr)); gap:8px}
   .ae-thumbs:empty{display:none}
-  .ae-thumbs li{display:flex; flex-direction:column; gap:3px; font-size:12.5px; color:var(--text-muted); font-variant-numeric:tabular-nums; min-width:0}
+  .ae-thumbs li{position:relative; display:flex; flex-direction:column; gap:3px; font-size:12.5px; color:var(--text-muted); font-variant-numeric:tabular-nums; min-width:0}
   .ae-thumbs .ph{aspect-ratio:9/16; width:100%; border-radius:7px; background:var(--surface-2); border:1px solid var(--border); object-fit:cover; display:block}
   .ae-thumbs .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .ae-thumbs .x{position:absolute; top:-8px; right:-8px; width:40px; height:40px; border-radius:50%; border:0; background:transparent; padding:0; cursor:pointer; display:flex; align-items:center; justify-content:center}
+  .ae-thumbs .x span{width:28px; height:28px; border-radius:50%; background:rgba(12,14,18,0.82); color:#fff; font-size:18px; font-weight:700; line-height:28px; text-align:center; box-shadow:0 1px 4px rgba(0,0,0,0.4)}
+  .ae-thumbs .x:focus-visible span{outline:2px solid var(--focus); outline-offset:2px}
+  .ae-add{align-self:center}
   .ae-sum{font-size:15px; font-weight:700; display:flex; justify-content:space-between; gap:8px; font-variant-numeric:tabular-nums}
   .ae-sum.warn{color:var(--danger)}
   .ae-sum:empty{display:none}
@@ -266,6 +270,8 @@
         <input type="file" id="aeInput" accept="video/*" multiple>
       </label>
       <ul class="ae-thumbs" id="aeThumbs" aria-label="Vídeos escolhidos"></ul>
+      <label class="link-btn ae-add" for="aeAddInput" id="aeAddLabel" hidden>+ Adicionar mais vídeos</label>
+      <input type="file" id="aeAddInput" accept="video/*" multiple hidden>
       <div class="ae-sum" id="aeSum"></div>
 
       <div class="voice-box">
@@ -480,6 +486,6 @@
   </div>
 </dialog>
 
-<script type="module" src="./app.js?v=9"></script>
+<script type="module" src="./app.js?v=10"></script>
 </body>
 </html>
