@@ -912,6 +912,10 @@ function loadVideoIntoPreview(file){
     updateEmptyMsg();
     if (mode !== 'foto') exportBtn.disabled = false;
     setStatus('');
+    var dur = videoEl.duration;
+    if (isFinite(dur) && dur > 120){
+      setStatus('Vídeo longo (' + Math.floor(dur / 60) + ' min ' + String(Math.round(dur % 60)).padStart(2, '0') + ' s). Pode levar alguns minutos para ficar pronto. Para Reels, o ideal é até 90 segundos.');
+    }
     videoEl.play().catch(function(){});
   }
   function onFail(){
@@ -1363,91 +1367,109 @@ async function exportVideo(){
   exportBtn.disabled = true;
   var t0 = Date.now();
   var progId = newId();
-  var pollTimer = null;
-  var phase = 'upload';
   var upW = isAE ? 0.04 : 0.45;
-  function stopPoll(){ if (pollTimer){ clearInterval(pollTimer); pollTimer = null; } }
-  function poll(){
-    fetch(SERVER + '/render/progresso/' + encodeURIComponent(progId), { cache: 'no-store' })
-      .then(function(r){ return r.json(); })
-      .then(function(p){
-        if (phase !== 'server' || !p) return;
-        if (p.fase === 'fila'){ setStatus('O servidor está terminando outro vídeo. Já já começa o seu…'); return; }
-        setStatus('Colocando a arte no vídeo…');
-        setProgress(upW + (0.92 - upW) * Math.max(0, Math.min(1, p.pct || 0)));
-      }).catch(function(){});
+  var phase = 'upload';
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+  // 1) envia (o servidor responde na hora com 202 e processa em segundo plano)
+  function send(formData){
+    return new Promise(function(resolve, reject){
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', RENDER_ENDPOINT);
+      xhr.responseType = 'blob';
+      xhr.timeout = 20 * 60 * 1000;
+      xhr.upload.onprogress = function(e){
+        if (e.lengthComputable && phase === 'upload') setProgress(upW * e.loaded / e.total);
+      };
+      xhr.upload.onload = function(){ phase = 'server'; setProgress(upW); setStatus('Colocando a arte no vídeo…'); };
+      xhr.onload = function(){
+        if (xhr.status === 202) { resolve({ async: true }); return; }
+        if (xhr.status >= 200 && xhr.status < 300){ resolve({ blob: xhr.response }); return; } // servidor antigo
+        readXhrError(xhr).then(function(msg){ var err = new Error(msg); err.status = xhr.status; reject(err); });
+      };
+      xhr.onerror = function(){ reject(new Error('Falha de conexão com o servidor. Confere a internet.')); };
+      xhr.ontimeout = function(){ reject(new Error('Demorou demais.')); };
+      xhr.send(formData);
+    });
   }
+  // 2) acompanha o processamento até ficar pronto
+  async function waitReady(){
+    var falhas = 0;
+    var limite = Date.now() + 20 * 60 * 1000;
+    while (Date.now() < limite){
+      await sleep(1500);
+      var p = null;
+      try {
+        p = await fetch(SERVER + '/render/progresso/' + encodeURIComponent(progId), { cache: 'no-store' }).then(function(r){ return r.json(); });
+        falhas = 0;
+      } catch (e) {
+        if (++falhas >= 20) throw new Error('Falha de conexão com o servidor. Confere a internet.');
+        setStatus('Conexão instável. Continuo tentando…');
+        continue;
+      }
+      if (p.fase === 'pronto') return;
+      if (p.fase === 'erro') throw new Error(p.erro || 'Não deu pra gerar o vídeo.');
+      if (p.fase === 'fila'){ setStatus('O servidor está terminando outro vídeo. Já já começa o seu…'); continue; }
+      var pct = Math.max(0, Math.min(1, p.pct || 0));
+      setStatus('Colocando a arte no vídeo… ' + (pct > 0.02 ? Math.round(pct * 100) + '%' : ''));
+      setProgress(upW + (0.92 - upW) * pct);
+    }
+    throw new Error('Demorou demais.');
+  }
+  // 3) baixa o vídeo pronto
+  function download(){
+    return new Promise(function(resolve, reject){
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', SERVER + '/render/resultado/' + encodeURIComponent(progId));
+      xhr.responseType = 'blob';
+      xhr.onprogress = function(e){ if (e.lengthComputable) setProgress(0.92 + 0.08 * e.loaded / e.total); };
+      xhr.onload = function(){
+        if (xhr.status === 200){ resolve(xhr.response); return; }
+        readXhrError(xhr).then(function(msg){ reject(new Error(msg)); });
+      };
+      xhr.onerror = function(){ reject(new Error('Falha de conexão ao baixar o vídeo pronto.')); };
+      xhr.send();
+    });
+  }
+
   try {
     setStatus('Preparando a arte…');
     setProgress(0);
     var overlayBlob = await overlayPngBlob();
-
     var formData = new FormData();
     formData.append('progressId', progId);
+    formData.append('async', '1');
     if (isAE) formData.append('montagemId', aeMontagemId);
     formData.append('overlay', overlayBlob, 'overlay.png');
     if (!isAE) formData.append('video', videoFile);
 
     setStatus(isAE ? 'Colocando a arte no vídeo montado…' : 'Enviando o vídeo…');
-    var blob = await new Promise(function(resolve, reject){
-      var xhr = new XMLHttpRequest();
-      xhr.open('POST', RENDER_ENDPOINT);
-      xhr.responseType = 'blob';
-      xhr.timeout = 12 * 60 * 1000;
-      xhr.upload.onprogress = function(e){
-        if (e.lengthComputable && phase === 'upload') setProgress(upW * e.loaded / e.total);
-      };
-      xhr.upload.onload = function(){
-        if (phase !== 'upload') return;
-        phase = 'server';
-        setProgress(upW);
-        setStatus('Colocando a arte no vídeo…');
-        poll();
-        pollTimer = setInterval(poll, 1000);
-      };
-      xhr.onprogress = function(e){
-        if (xhr.status && xhr.status !== 200) return;
-        if (phase !== 'download'){
-          phase = 'download';
-          stopPoll();
-          setStatus('Baixando o vídeo pronto…');
-        }
-        if (e.lengthComputable) setProgress(0.92 + 0.08 * e.loaded / e.total);
-      };
-      xhr.onload = function(){
-        stopPoll();
-        if (xhr.status >= 200 && xhr.status < 300){ resolve(xhr.response); return; }
-        readXhrError(xhr).then(function(msg){
-          var err = new Error(msg);
-          err.status = xhr.status;
-          reject(err);
-        });
-      };
-      xhr.onerror = function(){ stopPoll(); reject(new Error('Falha de conexão com o servidor. Confere a internet.')); };
-      xhr.ontimeout = function(){ stopPoll(); reject(new Error('Demorou demais.')); };
-      xhr.send(formData);
-    });
+    var sent = await send(formData);
+    var blob = sent.blob;
+    if (sent.async){
+      await waitReady();
+      setStatus('Baixando o vídeo pronto…');
+      setProgress(0.92);
+      blob = await download();
+    }
 
     setProgress(1);
     setStatus('Vídeo pronto!', 'ok');
     setTimeout(function(){ setProgress(null); }, 1200);
-    track('gerar', { tipo: isAE ? 'montagem' : 'video', ok: true, seg: (Date.now() - t0) / 1000, anuncio: anuncio });
+    track('gerar', { tipo: isAE ? 'montagem' : 'video', ok: true, seg: (Date.now() - t0) / 1000, anuncio: anuncio, mb: Math.round((videoFile.size || 0) / 1048576) });
     showDone('video', blob, 'giovani-' + fileBaseName() + (isAE ? '-montagem' : '') + '.mp4');
   } catch (err) {
-    stopPoll();
     console.error('[Studio Giovani] falha ao gerar vídeo:', err);
     setProgress(null);
-    track('gerar', { tipo: isAE ? 'montagem' : 'video', ok: false, anuncio: anuncio });
+    track('gerar', { tipo: isAE ? 'montagem' : 'video', ok: false, anuncio: anuncio, mb: Math.round((videoFile && videoFile.size || 0) / 1048576) });
     track('erro', { onde: 'gerar_video', msg: String((err && err.message) || '').slice(0, 60) });
     if (isAE && err && err.status === 410){
       aeInvalidate(err.message);
       setStatus(err.message, 'error');
     } else {
-      var detail = (err && err.message) ? ' (' + err.message + ')' : '';
-      setStatus('Não deu pra gerar o vídeo' + detail + '. Tenta de novo' + (isAE ? '.' : ', ou com um vídeo menor.'), 'error');
+      setStatus('Não deu pra gerar o vídeo: ' + ((err && err.message) || 'erro desconhecido'), 'error');
     }
   } finally {
-    stopPoll();
     exportBtn.disabled = !videoFile;
   }
 }
