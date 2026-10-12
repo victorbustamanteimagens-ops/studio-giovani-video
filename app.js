@@ -2396,18 +2396,12 @@ function legLayout(c, text){
   var half = Math.ceil(words.length / 2);
   return { size: LEG_MIN, lines: [words.slice(0, half).join(' '), words.slice(half).join(' ')], ok: false };
 }
-// posição vertical (topo do bloco), respeitando a arte e a área do Reels
+// posição vertical (topo do bloco): só as duas posições aprovadas, sempre
+// dentro da área livre (entre o valor e os dados do imóvel)
+var LEG_AREA_TOP = 360, LEG_AREA_BOTTOM = 1186;
 function legTop(st, blockH){
-  if (legPos === 'centro') return Math.round(960 - blockH / 2);
-  if (legPos === 'alto'){
-    var y = 150;
-    if (st.status.on && st.status.value) y += 54 + 36 + 14;
-    if (st.valor.on && st.valor.value) y += 40 + 30;
-    return Math.round(Math.max(y + 56, 260));
-  }
-  var rows = amenityRows(st).length;
-  var bottom = rows ? 1230 - 44 : 1640;
-  return Math.round(bottom - blockH);
+  var top = legPos === 'centro' ? Math.round(960 - blockH / 2) : Math.round(LEG_AREA_BOTTOM - blockH);
+  return Math.max(LEG_AREA_TOP, Math.min(LEG_AREA_BOTTOM - blockH, top));
 }
 function legDraw(c, text, top){
   var L = legLayout(c, text);
@@ -2576,7 +2570,7 @@ document.querySelectorAll('#legPosSeg button').forEach(function(btn){
 });
 try {
   var savedPos = localStorage.getItem('sg_leg_pos');
-  if (savedPos === 'alto' || savedPos === 'centro' || savedPos === 'baixo'){
+  if (savedPos === 'centro' || savedPos === 'baixo'){
     legPos = savedPos;
     document.querySelectorAll('#legPosSeg button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-pos') === legPos)); });
   }
