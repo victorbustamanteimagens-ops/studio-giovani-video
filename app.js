@@ -1260,6 +1260,7 @@ function applyMode(){
   el('videoUploadSection').hidden = mode !== 'video';
   el('autoeditSection').hidden = !isAE;
   el('legendaSection').hidden = isFoto;
+  legListening = false; legStopAt = null; legListenLabel();
   legRenderList();
   legSetStatus('');
   el('fotoUploadSection').hidden = !isFoto;
@@ -2445,8 +2446,44 @@ function drawCurrentCaption(c, st){
   if (i < 0) return;
   legDraw(c, items[i].texto, legTop(st, legBlockH(items[i].texto)));
 }
+// ouvir a prévia com som: o vídeo todo ou só uma frase
+var legListening = false;
+var legStopAt = null;
+function legListenLabel(){
+  var b = el('legListenBtn');
+  if (!b) return;
+  b.textContent = legListening ? '❚❚ Pausar' : '▶ Ouvir o vídeo com a legenda';
+}
+function legPlay(from, to){
+  if (!videoFile) return;
+  previewSetCollapsed(false);
+  stageEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  try { videoEl.currentTime = Math.max(0, from); } catch(e){}
+  legStopAt = to == null ? null : to;
+  videoEl.muted = false;
+  legListening = to == null;
+  legListenLabel();
+  videoEl.play().catch(function(){ legListening = false; legListenLabel(); });
+  track('ouvir_previa', { aba: mode, legenda: true, trecho: to != null });
+}
+el('legListenBtn').addEventListener('click', function(){
+  if (legListening && !videoEl.paused){ videoEl.pause(); return; }
+  legPlay(0, null);
+});
+videoEl.addEventListener('pause', function(){
+  if (legListening || legStopAt != null){
+    legListening = false; legStopAt = null;
+    videoEl.muted = true;
+    legListenLabel();
+  }
+});
+videoEl.addEventListener('ended', function(){ if (legListening){ legListening = false; videoEl.muted = true; legListenLabel(); } });
+
 // acompanha o vídeo da prévia e troca a frase na hora certa
 (function legLoop(){
+  if (legStopAt != null && !videoEl.paused && videoEl.currentTime >= legStopAt){
+    videoEl.pause();
+  }
   if (mode !== 'foto' && legCur().items.length){
     var i = legIndexAt(videoEl.currentTime || 0);
     if (i !== legLastIdx){ legLastIdx = i; render(); legHighlight(i); }
@@ -2490,9 +2527,9 @@ function legRenderList(){
     var li = document.createElement('li');
     var head = document.createElement('div'); head.className = 'leg-head';
     var tm = document.createElement('button'); tm.type = 'button'; tm.className = 'leg-time';
-    tm.textContent = legFmt(it.inicio) + ' – ' + legFmt(it.fim);
-    tm.setAttribute('aria-label', 'Ver na prévia a frase ' + (i + 1));
-    tm.addEventListener('click', function(){ previewSetCollapsed(false); try { videoEl.currentTime = it.inicio + 0.05; } catch(e){} render(); });
+    tm.textContent = '▶ ' + legFmt(it.inicio) + ' – ' + legFmt(it.fim);
+    tm.setAttribute('aria-label', 'Ouvir a frase ' + (i + 1));
+    tm.addEventListener('click', function(){ legPlay(it.inicio, it.fim); });
     head.appendChild(tm);
     var warn = document.createElement('span'); warn.className = 'leg-warn';
     head.appendChild(warn);
