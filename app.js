@@ -793,6 +793,7 @@ function render(){
   } else {
     renderOverlayTall(ctx, W, H, st, variantColors);
   }
+  drawCurrentCaption(ctx, st);
 }
 
 FIELD_KEYS.forEach(function(key){
@@ -859,6 +860,7 @@ var videoTabFile = null;
 var aeResultFile = null;
 
 function setVideoTabFile(file, fromDraft){
+  legClear('video', 'Vídeo novo escolhido. Gere a legenda de novo, se quiser.');
   videoTabFile = file;
   el('uploadFilename').textContent = file.name;
   el('videoPickTitle').textContent = 'Trocar o vídeo';
@@ -1257,6 +1259,9 @@ function applyMode(){
   var isAE = mode === 'autoedit';
   el('videoUploadSection').hidden = mode !== 'video';
   el('autoeditSection').hidden = !isAE;
+  el('legendaSection').hidden = isFoto;
+  legRenderList();
+  legSetStatus('');
   el('fotoUploadSection').hidden = !isFoto;
   videoEl.style.display = isFoto ? 'none' : 'block';
   photoEl.style.display = isFoto ? 'block' : 'none';
@@ -1316,8 +1321,9 @@ function overlayPngBlob(){
   return new Promise(function(resolve){
     // o overlay já está desenhado no canvas visível (fundo transparente) —
     // basta exportar exatamente o que está na prévia.
+    renderSkipCaption = true;
     render();
-    canvas.toBlob(function(blob){ resolve(blob); }, 'image/png');
+    canvas.toBlob(function(blob){ renderSkipCaption = false; render(); resolve(blob); }, 'image/png');
   });
 }
 
@@ -1436,15 +1442,35 @@ async function exportVideo(){
     setStatus('Preparando a arte…');
     setProgress(0);
     var overlayBlob = await overlayPngBlob();
-    var formData = new FormData();
-    formData.append('progressId', progId);
-    formData.append('async', '1');
-    if (isAE) formData.append('montagemId', aeMontagemId);
-    formData.append('overlay', overlayBlob, 'overlay.png');
-    if (!isAE) formData.append('video', videoFile);
-
-    setStatus(isAE ? 'Colocando a arte no vídeo montado…' : 'Enviando o vídeo…');
-    var sent = await send(formData);
+    var leg = await legBuildFiles();
+    var legS = legCur();
+    function buildForm(useStored){
+      var formData = new FormData();
+      formData.append('progressId', progId);
+      formData.append('async', '1');
+      if (isAE) formData.append('montagemId', aeMontagemId);
+      else if (useStored) formData.append('uploadId', legS.uploadId);
+      formData.append('overlay', overlayBlob, 'overlay.png');
+      if (leg.files.length){
+        formData.append('legendas', JSON.stringify(leg.info));
+        leg.files.forEach(function(b, i){ formData.append('legenda', b, 'legenda' + i + '.png'); });
+      }
+      if (!isAE && !useStored) formData.append('video', videoFile);
+      return formData;
+    }
+    var useStored = !isAE && !!legS.uploadId && videoFile === videoTabFile;
+    if (useStored){ upW = 0.04; }
+    setStatus(isAE || useStored ? 'Colocando a arte no vídeo…' : 'Enviando o vídeo…');
+    var sent;
+    try {
+      sent = await send(buildForm(useStored));
+    } catch (e) {
+      if (!(useStored && e && e.status === 410)) throw e;
+      // o vídeo guardado expirou: sobe de novo
+      legS.uploadId = null; upW = 0.45; phase = 'upload';
+      setStatus('Enviando o vídeo…');
+      sent = await send(buildForm(false));
+    }
     var blob = sent.blob;
     if (sent.async){
       await waitReady();
@@ -1726,6 +1752,7 @@ function aeRefreshBtn(){
 // A montagem atual deixou de valer (trocou vídeos ou locução, ou expirou no servidor)
 function aeInvalidate(msg){
   var had = !!(aeResultFile || aeMontagemId);
+  legClear('autoedit');
   aeResultFile = null;
   aeMontagemId = null;
   aePlanData = null;
@@ -2011,6 +2038,7 @@ function aeFetchPlan(id){
     .catch(function(){ return null; });
 }
 async function aeHandleResult(xhr, withVoice, wasRemontar){
+  legClear('autoedit', 'A montagem mudou. Gere a legenda de novo.');
   aeSetProgress(0.97);
   aeResultFile = new File([xhr.response], 'giovani-montagem-previa.mp4', { type: 'video/mp4' });
   aeMontagemId = xhr.getResponseHeader('X-Autoedit-Id') || null;
@@ -2314,6 +2342,256 @@ videoEl.addEventListener('pause', function(){
   aeListening = false;
   videoEl.muted = true;
   el('aeListenBtn').textContent = 'Continuar ouvindo';
+});
+
+
+// ======================= LEGENDA (transcrição com IA) =======================
+// A IA transcreve a fala do vídeo; o corretor corrige o texto e escolhe a
+// posição. Cada frase vira um PNG (desenhado igual à prévia) que o servidor
+// coloca por cima do vídeo só no seu intervalo de tempo.
+var LEGENDA_ENDPOINT = SERVER + '/legenda';
+var LEG_FONT = '800 {s}px "Montserrat", "Work Sans", sans-serif';
+var LEG_SIZE = 50, LEG_MIN = 40, LEG_MAXW = 840, LEG_COLOR = '#FFD21F';
+var legStore = { video: { items: [], uploadId: null }, autoedit: { items: [] } };
+var legPos = 'baixo';
+var legBusy = false;
+var renderSkipCaption = false;
+var legLastIdx = -2;
+
+function legCur(){ if (!legStore) return { items: [] }; return mode === 'autoedit' ? legStore.autoedit : legStore.video; }
+function legClear(which, msg){
+  var s = legStore[which];
+  if (!s.items.length && !s.uploadId) return;
+  s.items = []; if ('uploadId' in s) s.uploadId = null;
+  if ((which === 'autoedit') === (mode === 'autoedit')){
+    legRenderList();
+    if (msg) legSetStatus(msg);
+    render();
+  }
+}
+function legSetStatus(t, state){ var e = el('legStatus'); e.textContent = t || ''; e.dataset.state = state || ''; }
+
+// quebra em 2 linhas equilibradas (1 linha se for bem curta); diminui a letra se precisar
+function legLayout(c, text){
+  var words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  for (var size = LEG_SIZE; size >= LEG_MIN; size -= 2){
+    c.font = LEG_FONT.replace('{s}', size);
+    var full = words.join(' ');
+    if (c.measureText(full).width <= LEG_MAXW * 0.62 || words.length < 4){
+      if (c.measureText(full).width <= LEG_MAXW) return { size: size, lines: [full], ok: true };
+    }
+    var best = null;
+    for (var i = 1; i < words.length; i++){
+      var a = words.slice(0, i).join(' '), b = words.slice(i).join(' ');
+      var wa = c.measureText(a).width, wb = c.measureText(b).width;
+      if (wa > LEG_MAXW || wb > LEG_MAXW) continue;
+      var d = Math.abs(wa - wb);
+      if (!best || d < best.d) best = { a: a, b: b, d: d };
+    }
+    if (best) return { size: size, lines: [best.a, best.b], ok: true };
+  }
+  // não coube em 2 linhas: corta visualmente e avisa no editor
+  c.font = LEG_FONT.replace('{s}', LEG_MIN);
+  var half = Math.ceil(words.length / 2);
+  return { size: LEG_MIN, lines: [words.slice(0, half).join(' '), words.slice(half).join(' ')], ok: false };
+}
+// posição vertical (topo do bloco), respeitando a arte e a área do Reels
+function legTop(st, blockH){
+  if (legPos === 'centro') return Math.round(960 - blockH / 2);
+  if (legPos === 'alto'){
+    var y = 150;
+    if (st.status.on && st.status.value) y += 54 + 36 + 14;
+    if (st.valor.on && st.valor.value) y += 40 + 30;
+    return Math.round(Math.max(y + 56, 260));
+  }
+  var rows = amenityRows(st).length;
+  var bottom = rows ? 1230 - 44 : 1640;
+  return Math.round(bottom - blockH);
+}
+function legDraw(c, text, top){
+  var L = legLayout(c, text);
+  var lh = Math.round(L.size * 1.2);
+  c.save();
+  c.font = LEG_FONT.replace('{s}', L.size);
+  c.textAlign = 'center'; c.textBaseline = 'top';
+  c.lineJoin = 'round';
+  L.lines.forEach(function(line, i){
+    var y = top + i * lh;
+    c.shadowColor = 'rgba(0,0,0,0.75)'; c.shadowBlur = 12; c.shadowOffsetY = 4;
+    c.strokeStyle = 'rgba(0,0,0,0.6)'; c.lineWidth = 5;
+    c.strokeText(line, 540, y);
+    c.shadowColor = 'transparent';
+    c.fillStyle = LEG_COLOR;
+    c.fillText(line, 540, y);
+  });
+  c.restore();
+  return L;
+}
+function legBlockH(text){
+  var L = legLayout(ctx, text);
+  return Math.round(L.size * 1.2) * L.lines.length;
+}
+function legIndexAt(t){
+  var items = legCur().items;
+  for (var i = 0; i < items.length; i++){ if (t >= items[i].inicio && t < items[i].fim) return i; }
+  return -1;
+}
+// chamado pelo render(): desenha a frase do momento na prévia
+function drawCurrentCaption(c, st){
+  if (mode === 'foto' || renderSkipCaption) return;
+  var items = legCur().items;
+  if (!items.length || !videoFile) return;
+  var i = legIndexAt(videoEl.currentTime || 0);
+  if (i < 0) return;
+  legDraw(c, items[i].texto, legTop(st, legBlockH(items[i].texto)));
+}
+// acompanha o vídeo da prévia e troca a frase na hora certa
+(function legLoop(){
+  if (mode !== 'foto' && legCur().items.length){
+    var i = legIndexAt(videoEl.currentTime || 0);
+    if (i !== legLastIdx){ legLastIdx = i; render(); legHighlight(i); }
+  }
+  requestAnimationFrame(legLoop);
+})();
+
+// PNGs das frases para o vídeo final
+async function legBuildFiles(){
+  var items = legCur().items;
+  var st = readState();
+  var files = [], info = [];
+  for (var i = 0; i < items.length; i++){
+    var it = items[i];
+    if (!it.texto.trim()) continue;
+    var h = legBlockH(it.texto);
+    var top = legTop(st, h);
+    var pad = 24;
+    var cv = document.createElement('canvas');
+    cv.width = 1080; cv.height = h + pad * 2;
+    var cx = cv.getContext('2d');
+    legDraw(cx, it.texto, pad);
+    var blob = await new Promise(function(r){ cv.toBlob(r, 'image/png'); });
+    files.push(blob);
+    info.push({ inicio: it.inicio, fim: it.fim, y: top - pad });
+  }
+  return { files: files, info: info };
+}
+
+function legFmt(t){ t = Math.max(0, t); var m = Math.floor(t / 60), s = (t % 60); return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1).replace('.', ','); }
+function legHighlight(i){
+  el('legList').querySelectorAll('li').forEach(function(li, k){ li.classList.toggle('on', k === i); });
+}
+function legRenderList(){
+  var s = legCur();
+  var has = s.items.length > 0;
+  el('legEditor').hidden = !has;
+  el('legBtn').textContent = has ? 'Gerar a legenda de novo' : 'Gerar legenda automática';
+  var ol = el('legList'); ol.innerHTML = '';
+  s.items.forEach(function(it, i){
+    var li = document.createElement('li');
+    var head = document.createElement('div'); head.className = 'leg-head';
+    var tm = document.createElement('button'); tm.type = 'button'; tm.className = 'leg-time';
+    tm.textContent = legFmt(it.inicio) + ' – ' + legFmt(it.fim);
+    tm.setAttribute('aria-label', 'Ver na prévia a frase ' + (i + 1));
+    tm.addEventListener('click', function(){ previewSetCollapsed(false); try { videoEl.currentTime = it.inicio + 0.05; } catch(e){} render(); });
+    head.appendChild(tm);
+    var warn = document.createElement('span'); warn.className = 'leg-warn';
+    head.appendChild(warn);
+    var ta = document.createElement('textarea');
+    ta.rows = 2; ta.value = it.texto; ta.id = 'leg_t_' + i;
+    ta.setAttribute('aria-label', 'Texto da frase ' + (i + 1));
+    function check(){ var L = legLayout(ctx, it.texto); warn.textContent = L.ok ? '' : 'Texto longo: toque em Dividir'; }
+    ta.addEventListener('input', function(){ it.texto = ta.value.replace(/\s*\n\s*/g, ' '); check(); render(); });
+    check();
+    var ctl = document.createElement('div'); ctl.className = 'leg-ctl';
+    function mk(label, fn, dis){ var b = document.createElement('button'); b.type = 'button'; b.className = 'mini-btn'; b.textContent = label; b.disabled = !!dis; b.addEventListener('click', fn); b.setAttribute('aria-label', label.replace('↓', 'com a frase de baixo') + ' (frase ' + (i + 1) + ')'); return b; }
+    ctl.append(
+      mk('Dividir', function(){ legSplit(i); }, it.texto.trim().split(/\s+/).length < 2),
+      mk('Juntar ↓', function(){ legJoin(i); }, i === s.items.length - 1),
+      mk('Apagar', function(){ s.items.splice(i, 1); legRenderList(); render(); })
+    );
+    li.append(head, ta, ctl);
+    ol.appendChild(li);
+  });
+  legLastIdx = -2;
+}
+function legSplit(i){
+  var s = legCur(), it = s.items[i];
+  var w = it.texto.trim().split(/\s+/); if (w.length < 2) return;
+  var k = Math.ceil(w.length / 2);
+  var a = w.slice(0, k).join(' '), b = w.slice(k).join(' ');
+  var mid = it.inicio + (it.fim - it.inicio) * (a.length / (a.length + b.length));
+  s.items.splice(i, 1, { inicio: it.inicio, fim: Math.round(mid * 100) / 100, texto: a }, { inicio: Math.round(mid * 100) / 100, fim: it.fim, texto: b });
+  legRenderList(); render();
+}
+function legJoin(i){
+  var s = legCur(), a = s.items[i], b = s.items[i + 1]; if (!b) return;
+  s.items.splice(i, 2, { inicio: a.inicio, fim: b.fim, texto: (a.texto + ' ' + b.texto).trim() });
+  legRenderList(); render();
+}
+
+document.querySelectorAll('#legPosSeg button').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    legPos = btn.getAttribute('data-pos');
+    document.querySelectorAll('#legPosSeg button').forEach(function(b){ b.setAttribute('aria-pressed', String(b === btn)); });
+    legLastIdx = -2; render();
+    try { localStorage.setItem('sg_leg_pos', legPos); } catch(e){}
+  });
+});
+try {
+  var savedPos = localStorage.getItem('sg_leg_pos');
+  if (savedPos === 'alto' || savedPos === 'centro' || savedPos === 'baixo'){
+    legPos = savedPos;
+    document.querySelectorAll('#legPosSeg button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-pos') === legPos)); });
+  }
+} catch(e){}
+
+el('legRemoveBtn').addEventListener('click', function(){
+  legClear(mode === 'autoedit' ? 'autoedit' : 'video', 'Legenda removida.');
+});
+
+el('legBtn').addEventListener('click', function(){
+  if (legBusy) return;
+  var isAE = mode === 'autoedit';
+  if (isAE && !aeMontagemId){ legSetStatus('Monte o vídeo com IA primeiro.', 'error'); return; }
+  if (!isAE && !videoTabFile){ legSetStatus('Escolha o vídeo primeiro.', 'error'); return; }
+  legBusy = true;
+  var btn = el('legBtn'); btn.disabled = true;
+  var which = isAE ? 'autoedit' : 'video';
+  var t0 = Date.now();
+  var form = new FormData();
+  if (isAE) form.append('montagemId', aeMontagemId);
+  else form.append('video', videoTabFile, videoTabFile.name || 'video.mp4');
+  legSetStatus(isAE ? 'A IA está ouvindo a locução…' : 'Enviando o vídeo…');
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', LEGENDA_ENDPOINT);
+  xhr.timeout = 15 * 60 * 1000;
+  xhr.upload.onprogress = function(e){ if (!isAE && e.lengthComputable) legSetStatus('Enviando o vídeo… ' + Math.round(e.loaded / e.total * 100) + '%'); };
+  xhr.upload.onload = function(){ legSetStatus('A IA está ouvindo o vídeo e escrevendo a legenda… (uns 10 a 40 segundos)'); };
+  function done(){ legBusy = false; btn.disabled = false; }
+  xhr.onload = function(){
+    done();
+    var data = null; try { data = JSON.parse(xhr.responseText); } catch(e){}
+    if (xhr.status !== 200 || !data){
+      var msg = (data && data.error) || ('O servidor respondeu ' + xhr.status + '.');
+      legSetStatus(msg, 'error');
+      if (isAE && xhr.status === 410) aeInvalidate(msg);
+      track('legenda', { aba: which, ok: false });
+      return;
+    }
+    var s = legStore[which];
+    s.items = (data.legendas || []).map(function(l){ return { inicio: l.inicio, fim: l.fim, texto: l.texto }; });
+    if (!isAE) s.uploadId = data.uploadId || null;
+    if ((mode === 'autoedit') === isAE){
+      legRenderList(); render();
+      legSetStatus(s.items.length
+        ? 'Legenda pronta. Confira o texto de cada frase e toque em “Gerar vídeo final”.'
+        : 'Não encontrei fala nesse vídeo.', s.items.length ? 'ok' : 'error');
+    }
+    track('legenda', { aba: which, ok: true, frases: s.items.length, seg: (Date.now() - t0) / 1000 });
+  };
+  xhr.onerror = function(){ done(); legSetStatus('Falha de conexão com o servidor. Confere a internet e tenta de novo.', 'error'); };
+  xhr.ontimeout = function(){ done(); legSetStatus('Demorou demais. Tenta de novo.', 'error'); };
+  xhr.send(form);
 });
 
 

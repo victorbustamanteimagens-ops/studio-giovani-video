@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Studio Giovani</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=Montserrat:wght@800&display=swap">
 <style>
   :root{
     --bg:#F5F3EE; --surface:#FFFFFF; --surface-2:#EFEBE1;
@@ -122,6 +122,17 @@
   .mini-btn:disabled{opacity:0.4; cursor:default}
   .mini-btn:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
   .adjust-note{font-size:14px; color:var(--text-muted); line-height:1.4; margin:0}
+  .leg-editor{display:flex; flex-direction:column; gap:12px; padding:14px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2)}
+  .leg-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px}
+  .leg-ctl .mini-btn{flex:1}
+  .leg-list li{display:flex; flex-direction:column; gap:8px; padding:12px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface)}
+  .leg-list li.on{border-color:var(--accent)}
+  .leg-head{display:flex; justify-content:space-between; align-items:center; gap:8px}
+  .leg-time{font:inherit; font-size:14px; font-weight:700; font-variant-numeric:tabular-nums; min-height:40px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer}
+  .leg-warn{font-size:13px; font-weight:700; color:var(--danger)}
+  .leg-list textarea{font:inherit; font-size:16px; line-height:1.4; padding:9px 12px; border-radius:9px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%; resize:vertical}
+  .leg-list textarea:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .leg-ctl{display:flex; gap:6px; flex-wrap:wrap}
 
   .voice-box{display:flex; flex-direction:column; gap:10px; padding:14px; border-radius:12px; border:1px solid var(--border); background:var(--surface-2)}
   .voice-head{display:flex; justify-content:space-between; align-items:baseline; font-size:16px}
@@ -346,6 +357,24 @@
       <div class="reposition-hint">Arraste a foto na prévia pra reposicionar</div>
     </fieldset>
 
+    <fieldset id="legendaSection">
+      <legend>Legenda <span class="toggle-label opt">(opcional)</span></legend>
+      <p class="voice-hint">A IA escreve a legenda a partir da fala do vídeo. Depois você confere o texto e escolhe onde ela aparece.</p>
+      <button type="button" class="enhance-btn" id="legBtn">Gerar legenda automática</button>
+      <div class="ae-status" id="legStatus" role="status" aria-live="polite"></div>
+      <div class="leg-editor" id="legEditor" hidden>
+        <div class="sub-legend" style="margin-top:0">Posição da legenda</div>
+        <div class="tabs" id="legPosSeg" role="group" aria-label="Posição da legenda">
+          <button type="button" class="tab" data-pos="alto" aria-pressed="false">No alto</button>
+          <button type="button" class="tab" data-pos="centro" aria-pressed="false">No centro</button>
+          <button type="button" class="tab" data-pos="baixo" aria-pressed="true">Embaixo</button>
+        </div>
+        <p class="adjust-note">Toque no horário de uma frase para vê-la na prévia. Corrija o texto direto na caixa.</p>
+        <ol class="leg-list" id="legList"></ol>
+        <button type="button" class="link-btn" id="legRemoveBtn">Remover a legenda</button>
+      </div>
+    </fieldset>
+
     <fieldset>
       <legend>Etiqueta do anúncio</legend>
       <div class="chips" id="anuncioSeg" role="group" aria-label="Tipo de anúncio">
@@ -486,6 +515,6 @@
   </div>
 </dialog>
 
-<script type="module" src="./app.js?v=11"></script>
+<script type="module" src="./app.js?v=12"></script>
 </body>
 </html>
