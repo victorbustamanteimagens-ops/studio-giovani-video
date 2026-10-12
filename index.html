@@ -237,7 +237,13 @@
   .sheet-actions{display:flex; flex-direction:column; gap:10px}
   .result-media{display:flex; justify-content:center; background:var(--surface-2); border-radius:12px; padding:10px}
   .result-media video, .result-media img{max-height:48vh; max-width:100%; border-radius:8px; display:block}
-  .result-media video{aspect-ratio:9/16; height:48vh; width:auto; background:#0B2A4A}
+  .cap-box{display:flex; flex-direction:column; gap:8px; padding:14px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border)}
+  .cap-box textarea{font:inherit; font-size:15px; line-height:1.45; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%; resize:vertical}
+  .cap-box textarea:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  .cap-actions{display:flex; gap:8px}
+  .cap-actions button{flex:1; min-height:48px; font-size:15px; padding:10px}
+  .cap-hint{font-size:14px !important}
+  .result-media video{aspect-ratio:9/16; height:40vh; width:auto; background:#0B2A4A}
 </style>
 </head>
 <body>
@@ -506,6 +512,15 @@
     <h2 id="doneTitle">Pronto!</h2>
     <div class="result-media" id="doneMedia"></div>
     <p id="doneHint">Mande direto pro WhatsApp ou Instagram, ou salve no celular.</p>
+    <div class="cap-box">
+      <label class="sub-legend" for="doneCaption" style="margin-top:0">Legenda para o post</label>
+      <textarea id="doneCaption" rows="9" spellcheck="true"></textarea>
+      <div class="cap-actions">
+        <button type="button" class="primary-btn" id="doneCaptionCopy">Copiar legenda</button>
+        <button type="button" class="secondary-btn" id="doneCaptionNew">Outra versão</button>
+      </div>
+      <p class="cap-hint">Copie e cole no Instagram na hora de postar. Dá pra editar o texto aqui antes.</p>
+    </div>
     <div class="sheet-actions">
       <button type="button" class="primary-btn" id="doneShareBtn">Enviar pelo WhatsApp / Instagram</button>
       <button type="button" class="secondary-btn" id="doneSaveBtn">Salvar no celular</button>
@@ -515,6 +530,6 @@
   </div>
 </dialog>
 
-<script type="module" src="./app.js?v=14"></script>
+<script type="module" src="./app.js?v=15"></script>
 </body>
 </html>

@@ -1637,6 +1637,7 @@ var isTouch = false;
 try { isTouch = window.matchMedia('(pointer: coarse)').matches; } catch (e) {}
 
 function showDone(kind, blob, filename){
+  capVariant = 0; try { capFill(); } catch (e) {}
   if (doneData && doneData.url) URL.revokeObjectURL(doneData.url);
   var type = blob.type || (kind === 'foto' ? 'image/jpeg' : 'video/mp4');
   var file = null;
@@ -2623,6 +2624,102 @@ el('legBtn').addEventListener('click', function(){
   xhr.onerror = function(){ done(); legSetStatus('Falha de conexão com o servidor. Confere a internet e tenta de novo.', 'error'); };
   xhr.ontimeout = function(){ done(); legSetStatus('Demorou demais. Tenta de novo.', 'error'); };
   xhr.send(form);
+});
+
+
+// ======================= LEGENDA DO POST (texto pro Instagram) =======================
+// Segue o padrão dos posts do Giovani: chamada com emoji + bairro, uma frase
+// sobre o imóvel, lista com ✨, 💰 valor, 📲 chamada pra visita e hashtags.
+// Feito aqui no celular, a partir dos dados da arte: sem custo e na hora.
+var capVariant = 0;
+function capTitle(s){ return String(s || '').trim(); }
+function capTag(s){
+  return String(s || '').trim().split(/\s+/).map(function(w){ return w.charAt(0).toUpperCase() + w.slice(1); }).join('').replace(/[^0-9A-Za-zÀ-ÿ]/g, '');
+}
+function capValorCurto(v){
+  var n = Number(String(v || '').replace(/[^\d]/g, ''));
+  if (!n) return '';
+  if (n >= 1000000){ var m = n / 1000000; return 'R$ ' + (Math.round(m * 100) / 100).toString().replace('.', ',') + (m >= 2 ? ' milhões' : ' milhão'); }
+  if (n >= 1000) return 'R$ ' + Math.round(n / 1000) + ' mil';
+  return '';
+}
+function capQuartos(q){
+  q = String(q || '').trim();
+  if (!q) return '';
+  return /^\d+$/.test(q) ? q + (q === '1' ? ' quarto' : ' quartos') : q;
+}
+function buildPostCaption(variant){
+  var st = readState();
+  var loc = splitLocalizacaoValue(st.localizacao.on ? st.localizacao.value : '');
+  var bairro = capTitle(loc.bairro) || 'uma ótima localização';
+  var cidade = capTitle(loc.cidade);
+  var onde = cidade ? bairro + ', ' + cidade : bairro;
+  var valor = st.valor.on ? st.valor.value : '';
+  var curto = capValorCurto(el('valor').value);
+  var area = st.area.on ? st.area.value : '';
+  var quartos = st.quartos.on ? capQuartos(st.quartos.value) : '';
+  var vagas = st.vagas.on ? capTitle(st.vagas.value) : '';
+  var destaque = st.destaque.on ? capTitle(st.destaque.value) : '';
+  var v = variant % 4;
+  var linhas = [];
+
+  if (anuncio === 'vendido'){
+    var hooksV = ['🎉 VENDIDO em ' + bairro + '!', '🔑 Mais uma chave entregue em ' + bairro + '!', '🎉 Mais um imóvel vendido em ' + bairro + '!', '🔑 Missão cumprida em ' + bairro + '!'];
+    linhas.push(hooksV[v]);
+    linhas.push('Mais uma família realizando o sonho do novo endereço' + (area ? ', em um imóvel de ' + area : '') + '.');
+    linhas.push('Obrigado pela confiança! Cada venda é resultado de estratégia, preço certo e uma negociação conduzida com segurança do início ao fim.');
+    linhas.push('📲 Quer vender seu imóvel com estratégia e segurança? Fale comigo.');
+    linhas.push(['#Vendido', '#' + capTag(loc.bairro), cidade ? '#' + capTag(cidade) : '', '#mercadoimobiliário', '#remaxaxxia', '#remax'].filter(function(h){ return h && h !== '#'; }).join(' '));
+    return linhas.join('\n\n');
+  }
+
+  var hooks = {
+    venda: ['🏡 Pronto para morar em ' + bairro + '!', '🏡 Seu novo endereço pode ser em ' + bairro + '!', curto ? '🏡 More em ' + bairro + ' por ' + curto + '!' : '✨ Excelente oportunidade em ' + bairro + '!', '✨ Excelente oportunidade em ' + bairro + '!'],
+    aluguel: ['🔑 Para alugar em ' + bairro + '!', '🏡 Seu novo lar pode ser em ' + bairro + '!', '🔑 Disponível para locação em ' + bairro + '!', '✨ Excelente opção para alugar em ' + bairro + '!'],
+    comercial: ['🏢 Oportunidade comercial em ' + bairro + '!', '🏢 O endereço certo para o seu negócio em ' + bairro + '!', '✨ Espaço comercial em ' + bairro + '!', '🏢 Seu negócio pode estar em ' + bairro + '!']
+  };
+  linhas.push((hooks[anuncio] || hooks.venda)[v]);
+
+  var tipoTxt = anuncio === 'comercial' ? 'Um espaço comercial' : 'Um imóvel';
+  var regiao = cidade || bairro;
+  var descs = [
+    tipoTxt + (area ? ' de ' + area : '') + ', confortável e em uma localização privilegiada de ' + regiao + '.',
+    tipoTxt + (area ? ' com ' + area + ' muito bem distribuídos' : ' muito bem distribuído') + ', em uma das regiões mais desejadas de ' + regiao + '.',
+    tipoTxt + (area ? ' de ' + area : '') + ', bem cuidado e com tudo o que você precisa por perto em ' + bairro + '.',
+    tipoTxt + (area ? ' de ' + area : '') + ' em ' + onde + ', com ótima localização e excelente custo-benefício.'
+  ];
+  linhas.push(descs[v]);
+
+  var itens = [];
+  if (quartos) itens.push('✨ ' + quartos.charAt(0).toUpperCase() + quartos.slice(1));
+  if (vagas) itens.push('✨ ' + vagas.charAt(0).toUpperCase() + vagas.slice(1));
+  if (destaque) itens.push('✨ ' + destaque.charAt(0).toUpperCase() + destaque.slice(1));
+  if (itens.length) linhas.push(itens.join('\n'));
+
+  if (valor) linhas.push('💰 ' + valor);
+  var fechamento = {
+    venda: 'Uma excelente oportunidade para morar ou investir em ' + bairro + '.',
+    aluguel: 'Ideal para quem busca conforto e praticidade em ' + bairro + '.',
+    comercial: 'Uma ótima oportunidade para instalar ou ampliar o seu negócio em ' + bairro + '.'
+  };
+  linhas.push(fechamento[anuncio] || fechamento.venda);
+  var ctas = ['📲 Agende sua visita e venha conhecer!', '📲 Entre em contato e agende sua visita!', '📲 Quer conhecer? Entre em contato e agende sua visita!', '📲 Agende sua visita e aproveite essa oportunidade!'];
+  linhas.push(ctas[v]);
+  var tagAnuncio = { venda: '#ImóvelÀVenda', aluguel: '#ImóvelParaAlugar', comercial: '#ImóvelComercial' }[anuncio] || '#ImóvelÀVenda';
+  linhas.push([loc.bairro ? '#' + capTag(loc.bairro) : '', cidade ? '#' + capTag(cidade) : '', tagAnuncio, cidade ? '#Imóveis' + capTag(cidade) : '#imóveis', '#remaxaxxia', '#remax'].filter(Boolean).join(' '));
+  return linhas.join('\n\n');
+}
+function capFill(){
+  var ta = el('doneCaption');
+  if (ta) ta.value = buildPostCaption(capVariant);
+}
+el('doneCaptionNew').addEventListener('click', function(){ capVariant++; capFill(); track('legenda_post', { acao: 'outra' }); });
+el('doneCaptionCopy').addEventListener('click', function(){
+  var ta = el('doneCaption'), btn = this;
+  function ok(){ btn.textContent = 'Copiada!'; setTimeout(function(){ btn.textContent = 'Copiar legenda'; }, 2000); track('legenda_post', { acao: 'copiar' }); }
+  try {
+    navigator.clipboard.writeText(ta.value).then(ok, function(){ ta.select(); document.execCommand('copy'); ok(); });
+  } catch (e) { ta.select(); try { document.execCommand('copy'); ok(); } catch (e2) {} }
 });
 
 
