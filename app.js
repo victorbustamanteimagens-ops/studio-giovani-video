@@ -74,7 +74,26 @@ var ANUNCIOS = {
 };
 var anuncio = 'venda';
 function anuncioCfg(){ return ANUNCIOS[anuncio] || ANUNCIOS.venda; }
+// Valor sempre no formato "R$ 560.000": aceita "560000", "560.000,00",
+// "R$560000" etc. Texto livre (ex.: "Sob consulta") fica como está.
+function formatValorBR(v){
+  v = String(v || '').trim();
+  var m = v.match(/^(?:R\$\s*)?(\d[\d.,\s]*)(.*)$/i);
+  if (!m) return v;
+  var num = m[1].replace(/\s/g, ''), resto = m[2].trim();
+  if (/^(mil|milh)/i.test(resto)) return 'R$ ' + num + ' ' + resto;
+  var inteiro = num, cent = '';
+  var c = num.match(/^(.*),(\d{1,2})$/);
+  if (c){ inteiro = c[1]; cent = c[2]; }
+  else { var d = num.match(/^(\d{1,3}(?:\.\d{3})*)\.(\d{1,2})$/); if (d && !/^\d{1,3}(\.\d{3})+$/.test(num)){ inteiro = d[1]; cent = d[2]; } }
+  inteiro = inteiro.replace(/[.,]/g, '');
+  if (!/^\d+$/.test(inteiro)) return v;
+  var out = 'R$ ' + String(Number(inteiro)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  if (cent && Number(cent) > 0) out += ',' + (cent.length === 1 ? cent + '0' : cent);
+  return out + (resto ? (resto.charAt(0) === '/' ? '' : ' ') + resto : '');
+}
 function valorComSufixo(v){
+  v = formatValorBR(v);
   var suf = anuncioCfg().sufixo;
   if (!v || !suf) return v;
   if (/\/|por m[eê]s|mensal|di[aá]ria|noite/i.test(v)) return v;
@@ -2627,21 +2646,66 @@ el('legBtn').addEventListener('click', function(){
 });
 
 
+el('valor').addEventListener('blur', function(){
+  var f = formatValorBR(this.value);
+  if (f && f !== this.value.trim()){ this.value = f; this.dispatchEvent(new Event('input', { bubbles: true })); }
+});
+
 // ======================= LEGENDA DO POST (texto pro Instagram) =======================
 // Segue o padrão dos posts do Giovani: chamada com emoji + bairro, uma frase
 // sobre o imóvel, lista com ✨, 💰 valor, 📲 chamada pra visita e hashtags.
 // Feito aqui no celular, a partir dos dados da arte: sem custo e na hora.
 var capVariant = 0;
-function capTitle(s){ return String(s || '').trim(); }
+// Se o corretor digitou tudo em MAIÚSCULAS (comum por causa da arte),
+// a legenda volta pro jeito normal: "Santa Rosa", "Niterói", "2 quartos".
+var CAP_MINUSC = { de:1, da:1, do:1, das:1, dos:1, e:1, em:1, na:1, no:1 };
+function capGritando(s){ s = String(s || ''); return s === s.toUpperCase() && /[A-ZÀ-Ý]{2}/.test(s); }
+function capTitle(s){
+  s = String(s || '').trim();
+  if (!capGritando(s)) return s;
+  return s.toLowerCase().split(/(\s+|-)/).map(function(w, i){
+    if (!w.trim() || w === '-') return w;
+    if (i > 0 && CAP_MINUSC[w]) return w;
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join('');
+}
+// Grafia certa dos lugares da região, mesmo se vier sem acento ou com acento trocado.
+var CAP_LUGARES = {
+  'niteroi': 'Niterói', 'sao goncalo': 'São Gonçalo', 'marica': 'Maricá', 'rio de janeiro': 'Rio de Janeiro',
+  'icarai': 'Icaraí', 'sao francisco': 'São Francisco', 'sao domingos': 'São Domingos', 'inga': 'Ingá',
+  'santa rosa': 'Santa Rosa', 'pe pequeno': 'Pé Pequeno', 'camboinhas': 'Camboinhas', 'itaipu': 'Itaipu',
+  'piratininga': 'Piratininga', 'charitas': 'Charitas', 'boa viagem': 'Boa Viagem', 'gragoata': 'Gragoatá',
+  'jardim icarai': 'Jardim Icaraí', 'vital brazil': 'Vital Brazil', 'fonseca': 'Fonseca', 'barreto': 'Barreto',
+  'centro': 'Centro', 'itacoatiara': 'Itacoatiara', 'cafuba': 'Cafubá', 'maceio': 'Maceió', 'badu': 'Badu',
+  'largo da batalha': 'Largo da Batalha', 'santa barbara': 'Santa Bárbara', 'engenho do mato': 'Engenho do Mato'
+};
+function capLugar(s){
+  var t = capTitle(s);
+  var k = t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  return CAP_LUGARES[k] || t;
+}
+function capFrase(s){
+  s = String(s || '').trim();
+  if (capGritando(s)) s = s.toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 function capTag(s){
   return String(s || '').trim().split(/\s+/).map(function(w){ return w.charAt(0).toUpperCase() + w.slice(1); }).join('').replace(/[^0-9A-Za-zÀ-ÿ]/g, '');
 }
 function capValorCurto(v){
-  var n = Number(String(v || '').replace(/[^\d]/g, ''));
+  var f = formatValorBR(v);
+  if (!/^R\$ [\d.]+(,\d\d)?$/.test(f)) return '';
+  var n = Number(f.replace(/^R\$ /, '').replace(/,\d\d$/, '').replace(/\./g, ''));
   if (!n) return '';
   if (n >= 1000000){ var m = n / 1000000; return 'R$ ' + (Math.round(m * 100) / 100).toString().replace('.', ',') + (m >= 2 ? ' milhões' : ' milhão'); }
   if (n >= 1000) return 'R$ ' + Math.round(n / 1000) + ' mil';
   return '';
+}
+function capQuartosVagas(q){
+  q = String(q || '').trim();
+  if (capGritando(q)) q = q.toLowerCase();
+  if (/^\d+$/.test(q)) return q + (q === '1' ? ' vaga' : ' vagas');
+  return q;
 }
 function capQuartos(q){
   q = String(q || '').trim();
@@ -2651,15 +2715,16 @@ function capQuartos(q){
 function buildPostCaption(variant){
   var st = readState();
   var loc = splitLocalizacaoValue(st.localizacao.on ? st.localizacao.value : '');
-  var bairro = capTitle(loc.bairro) || 'uma ótima localização';
-  var cidade = capTitle(loc.cidade);
+  loc.bairro = capLugar(loc.bairro);
+  var bairro = loc.bairro || 'uma ótima localização';
+  var cidade = capLugar(loc.cidade);
   var onde = cidade ? bairro + ', ' + cidade : bairro;
   var valor = st.valor.on ? st.valor.value : '';
   var curto = capValorCurto(el('valor').value);
   var area = st.area.on ? st.area.value : '';
-  var quartos = st.quartos.on ? capQuartos(st.quartos.value) : '';
-  var vagas = st.vagas.on ? capTitle(st.vagas.value) : '';
-  var destaque = st.destaque.on ? capTitle(st.destaque.value) : '';
+  var quartos = st.quartos.on ? capQuartos(capGritando(st.quartos.value) ? st.quartos.value.toLowerCase() : st.quartos.value) : '';
+  var vagas = st.vagas.on ? capQuartosVagas(st.vagas.value) : '';
+  var destaque = st.destaque.on ? capFrase(st.destaque.value) : '';
   var v = variant % 4;
   var linhas = [];
 
@@ -2678,7 +2743,9 @@ function buildPostCaption(variant){
     aluguel: ['🔑 Para alugar em ' + bairro + '!', '🏡 Seu novo lar pode ser em ' + bairro + '!', '🔑 Disponível para locação em ' + bairro + '!', '✨ Excelente opção para alugar em ' + bairro + '!'],
     comercial: ['🏢 Oportunidade comercial em ' + bairro + '!', '🏢 O endereço certo para o seu negócio em ' + bairro + '!', '✨ Espaço comercial em ' + bairro + '!', '🏢 Seu negócio pode estar em ' + bairro + '!']
   };
-  linhas.push((hooks[anuncio] || hooks.venda)[v]);
+  var hook = (hooks[anuncio] || hooks.venda)[v];
+  if (/pronto para morar/i.test(hook) && /pronto para morar/i.test(destaque)) hook = '✨ Excelente oportunidade em ' + bairro + '!';
+  linhas.push(hook);
 
   var tipoTxt = anuncio === 'comercial' ? 'Um espaço comercial' : 'Um imóvel';
   var regiao = cidade || bairro;
@@ -2691,9 +2758,9 @@ function buildPostCaption(variant){
   linhas.push(descs[v]);
 
   var itens = [];
-  if (quartos) itens.push('✨ ' + quartos.charAt(0).toUpperCase() + quartos.slice(1));
-  if (vagas) itens.push('✨ ' + vagas.charAt(0).toUpperCase() + vagas.slice(1));
-  if (destaque) itens.push('✨ ' + destaque.charAt(0).toUpperCase() + destaque.slice(1));
+  if (quartos) itens.push('✨ ' + capFrase(quartos));
+  if (vagas) itens.push('✨ ' + capFrase(vagas));
+  if (destaque) itens.push('✨ ' + capFrase(destaque));
   if (itens.length) linhas.push(itens.join('\n'));
 
   if (valor) linhas.push('💰 ' + valor);
