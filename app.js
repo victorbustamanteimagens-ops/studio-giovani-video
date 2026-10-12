@@ -1768,6 +1768,7 @@ function aeRefreshBtn(){
   el('aeThumbs').querySelectorAll('.x').forEach(function(b){ b.disabled = aeBusy; });
   el('aeAddLabel').hidden = !aeClips.length || aeBusy;
   el('aeRemontarBtn').disabled = aeBusy;
+  if (typeof ctaRender === 'function' && el('ctaSlotAbre')) try { ctaRender(); } catch (e) {}
 }
 
 // A montagem atual deixou de valer (trocou vídeos ou locução, ou expirou no servidor)
@@ -1778,6 +1779,7 @@ function aeInvalidate(msg){
   aeMontagemId = null;
   aePlanData = null;
   aeEdit = [];
+  ctaSent = { abre: null, fecha: null };
   el('aePlan').hidden = true;
   aeListenReset();
   if (mode === 'autoedit') clearVideoPreview();
@@ -1980,18 +1982,30 @@ function aeRenderPlan(focusPos){
   var outside = aeEdit.filter(function(c){ return !c.dentro; });
   var dirty = aeEditDirty();
   var total = inside.reduce(function(s, c){ return s + (c.fim - c.inicio) + (c.hold || 0); }, 0);
-  el('aeMeta').textContent = inside.length + (inside.length === 1 ? ' cena' : ' cenas') + ' · ' + aeSec(dirty ? total : (plan.duracaoFinal || total))
+  var ctaS = plan.cta || { abre: 0, fecha: 0 };
+  el('aeMeta').textContent = inside.length + (inside.length === 1 ? ' cena' : ' cenas') + ' · ' + aeSec((dirty ? total : (plan.duracaoFinal || total)) + (ctaS.abre || 0) + (ctaS.fecha || 0))
+    + (ctaS.abre || ctaS.fecha ? ' · com ' + (ctaS.abre && ctaS.fecha ? 'abertura e fechamento' : ctaS.abre ? 'abertura' : 'fechamento') : '')
     + (plan.comLocucao ? ' · com locução' : '') + (plan.ajustadaPeloCorretor && !dirty ? ' · ajustada por você' : '');
 
   var tl = el('aeTimeline'); tl.innerHTML = '';
+  function ctaSeg(label, d){
+    var seg = document.createElement('div');
+    seg.className = 'cta';
+    seg.style.flex = String(Math.max(d, 0.1));
+    seg.textContent = label;
+    seg.title = label + ' · ' + aeSec(d);
+    tl.appendChild(seg);
+  }
+  if (ctaS.abre) ctaSeg('você', ctaS.abre);
   inside.forEach(function(p, i){
     var dur = (p.fim - p.inicio) + (p.hold || 0);
     var seg = document.createElement('div');
     seg.style.flex = String(Math.max(dur, 0.1));
-    seg.textContent = i === 0 ? 'abertura' : aeSec(dur);
+    seg.textContent = i === 0 && !ctaS.abre ? 'abertura' : aeSec(dur);
     seg.title = (p.ambiente || p.nome) + ' · ' + aeSec(dur);
     tl.appendChild(seg);
   });
+  if (ctaS.fecha) ctaSeg('você', ctaS.fecha);
 
   var ol = el('aeShots'); ol.innerHTML = '';
   function btn(label, aria, fn, disabled){
@@ -2002,6 +2016,16 @@ function aeRenderPlan(focusPos){
     b.addEventListener('click', fn);
     return b;
   }
+  function ctaLi(txt, d){
+    var li = document.createElement('li');
+    var n = document.createElement('span'); n.className = 'n'; n.textContent = '•';
+    var t = document.createElement('span'); t.className = 't'; t.textContent = txt;
+    var tm = document.createElement('span'); tm.className = 'tm'; tm.textContent = aeSec(d);
+    var w = document.createElement('span'); w.className = 'w'; w.textContent = 'Entra inteiro. Para trocar ou tirar, use a caixa “Seu vídeo de abertura e de fechamento”.';
+    li.append(n, t, tm, w);
+    ol.appendChild(li);
+  }
+  if (ctaS.abre) ctaLi('Seu vídeo de abertura', ctaS.abre);
   inside.forEach(function(p, i){
     var li = document.createElement('li');
     var n = document.createElement('span'); n.className = 'n'; n.textContent = String(i + 1);
@@ -2026,6 +2050,7 @@ function aeRenderPlan(focusPos){
     li.appendChild(ctl);
     ol.appendChild(li);
   });
+  if (ctaS.fecha) ctaLi('Seu vídeo de fechamento', ctaS.fecha);
   outside.forEach(function(p){
     var li = document.createElement('li'); li.className = 'out';
     var n = document.createElement('span'); n.className = 'n'; n.textContent = '–';
@@ -2071,7 +2096,8 @@ async function aeHandleResult(xhr, withVoice, wasRemontar){
   aeListenReset();
   if (mode === 'autoedit') loadVideoIntoPreview(aeResultFile);
   aeSetPlan(plan);
-  el('aeListenBtn').hidden = !withVoice;
+  el('aeListenBtn').hidden = !(withVoice || ctaTemNaMontagem(plan));
+  aeListenReset();
   if (wasRemontar){
     aeSetStatus('Pronto, refiz com os seus ajustes. Confira na prévia.', 'ok');
   } else {
@@ -2109,6 +2135,7 @@ aeRunBtn.addEventListener('click', function(){
   aeClips.forEach(function(f){ form.append('clips', f, f.name); });
   var withVoice = !!voiceBlob;
   if (withVoice) form.append('voice', voiceBlob, voiceName);
+  var ctaEnv = ctaAppendForm(form);
   var xhr = new XMLHttpRequest();
   xhr.open('POST', AUTOEDIT_ENDPOINT);
   xhr.responseType = 'blob';
@@ -2133,6 +2160,7 @@ aeRunBtn.addEventListener('click', function(){
       });
       return;
     }
+    ctaSent = ctaEnv;
     aeHandleResult(xhr, withVoice, false).then(function(plan){
       track('montagem', { ok: true, voz: withVoice, n: aeClips.length, cortes: plan && plan.plano ? plan.plano.length : 0, seg: (Date.now() - t0) / 1000 });
     });
@@ -2199,6 +2227,182 @@ el('aeRawBtn').addEventListener('click', function(){
   }).finally(function(){ b.disabled = false; });
 });
 
+
+// ======================= CTA: vídeo de abertura / fechamento do corretor =======================
+// Gravado por ele, até 40 s. Fica guardado no aparelho (IndexedDB) e entra
+// inteiro antes e/ou depois da montagem. Trocar ou desligar depois que a
+// montagem está pronta não chama a IA: o servidor só emenda de novo.
+var CTA_MAX = 40;
+var CTA_SLOTS = { abre: 'Abre', fecha: 'Fecha' };
+var CTA_USAR_KEY = 'sg-cta-usar';
+var cta = { abre: null, fecha: null };          // {file, dur, thumb}
+var ctaUsar = { abre: false, fecha: false };
+var ctaSent = { abre: null, fecha: null };      // arquivo que o servidor já tem na montagem atual
+var ctaBusy = false;
+try { var cu = JSON.parse(localStorage.getItem(CTA_USAR_KEY) || 'null'); if (cu) ctaUsar = { abre: !!cu.abre, fecha: !!cu.fecha }; } catch (e) {}
+
+function ctaMsg(t, state){ var m = el('ctaMsg'); m.textContent = t || ''; m.dataset.state = state || ''; }
+function ctaFmt(d){ d = Math.round(d); return Math.floor(d / 60) + ':' + String(d % 60).padStart(2, '0'); }
+function ctaSaveUsar(){ try { localStorage.setItem(CTA_USAR_KEY, JSON.stringify(ctaUsar)); } catch (e) {} }
+function ctaUsando(k){ return !!(cta[k] && ctaUsar[k]); }
+function ctaTemNaMontagem(plan){ return !!(plan && plan.cta && (plan.cta.abre || plan.cta.fecha)); }
+
+function videoDuration(file){
+  return new Promise(function(resolve){
+    var url = URL.createObjectURL(file);
+    var v = document.createElement('video');
+    var t = setTimeout(function(){ done(null); }, 10000);
+    function done(d){ clearTimeout(t); v.removeAttribute('src'); try { v.load(); } catch (e) {} URL.revokeObjectURL(url); resolve(d); }
+    v.preload = 'metadata'; v.muted = true;
+    v.onloadedmetadata = function(){ done(isFinite(v.duration) ? v.duration : null); };
+    v.onerror = function(){ done(null); };
+    v.src = url;
+  });
+}
+
+function ctaRender(){
+  Object.keys(CTA_SLOTS).forEach(function(k){
+    var K = CTA_SLOTS[k], c = cta[k];
+    el('ctaPick' + K).hidden = !!c;
+    el('ctaBody' + K).hidden = !c;
+    el('ctaUsar' + K).checked = ctaUsando(k);
+    el('ctaUsar' + K).disabled = !c || ctaBusy || aeBusy;
+    el('ctaSlot' + K).classList.toggle('off', !!c && !ctaUsar[k]);
+    if (c){
+      el('ctaDur' + K).textContent = ctaFmt(c.dur) + (ctaUsar[k] ? ' · vai entrar na montagem' : ' · guardado, desligado');
+      el('ctaName' + K).textContent = c.file.name || 'vídeo';
+      if (c.thumb) el('ctaThumb' + K).src = c.thumb; else el('ctaThumb' + K).removeAttribute('src');
+    }
+    el('ctaRemove' + K).disabled = ctaBusy || aeBusy;
+    el('ctaInput' + K).disabled = ctaBusy || aeBusy;
+  });
+}
+
+async function ctaSet(k, file, restoring){
+  var d = await videoDuration(file);
+  if (!d){ ctaMsg('Não consegui ler esse vídeo. Tenta outro.', 'error'); return false; }
+  if (d > CTA_MAX + 0.5){
+    ctaMsg('Esse vídeo tem ' + Math.round(d) + ' segundos. O limite é ' + CTA_MAX + ': corte no celular e escolha de novo.', 'error');
+    return false;
+  }
+  cta[k] = { file: file, dur: d, thumb: null };
+  if (!restoring){
+    ctaUsar[k] = true;
+    ctaSaveUsar();
+    idbOp('readwrite', function(st){ return st.put({ blob: file, name: file.name || ('cta-' + k), type: file.type || '' }, k === 'abre' ? 'ctaAbre' : 'ctaFecha'); });
+  }
+  ctaRender();
+  makeVideoThumb(file).then(function(t){ if (cta[k] && cta[k].file === file){ cta[k].thumb = t; ctaRender(); } });
+  return true;
+}
+
+function ctaAppendForm(form){
+  var env = { abre: null, fecha: null };
+  Object.keys(CTA_SLOTS).forEach(function(k){
+    if (!ctaUsando(k)) return;
+    form.append(k === 'abre' ? 'ctaAbre' : 'ctaFecha', cta[k].file, cta[k].file.name || ('cta-' + k + '.mp4'));
+    env[k] = cta[k].file;
+  });
+  form.append('usarAbre', ctaUsando('abre') ? '1' : '0');
+  form.append('usarFecha', ctaUsando('fecha') ? '1' : '0');
+  return env;
+}
+
+// Montagem já pronta: aplica a mudança de CTA sem chamar a IA.
+function ctaAplicar(forcar){
+  if (!aeMontagemId || aeBusy) return;
+  var form = new FormData();
+  var env = { abre: ctaSent.abre, fecha: ctaSent.fecha };
+  Object.keys(CTA_SLOTS).forEach(function(k){
+    if (!ctaUsando(k)) return;
+    if (forcar || cta[k].file !== ctaSent[k]){
+      form.append(k === 'abre' ? 'ctaAbre' : 'ctaFecha', cta[k].file, cta[k].file.name || ('cta-' + k + '.mp4'));
+      env[k] = cta[k].file;
+    }
+  });
+  form.append('usarAbre', ctaUsando('abre') ? '1' : '0');
+  form.append('usarFecha', ctaUsando('fecha') ? '1' : '0');
+  ctaBusy = true; aeBusy = true;
+  aeRefreshBtn(); ctaRender(); aeRenderPlan();
+  aeSetProgress(0.1);
+  aeSetStatus('Atualizando a montagem com o seu vídeo de abertura/fechamento… (a IA não é usada de novo)');
+  var withVoice = aeResultHasVoice;
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', AUTOEDIT_ENDPOINT.replace(/\/smart$/, '/cta/') + encodeURIComponent(aeMontagemId));
+  xhr.responseType = 'blob';
+  xhr.timeout = 8 * 60 * 1000;
+  xhr.upload.onprogress = function(e){ if (e.lengthComputable) aeSetProgress(0.1 + 0.6 * e.loaded / e.total); };
+  function done(){ ctaBusy = false; aeFinishBusy(); ctaRender(); }
+  xhr.onload = function(){
+    done();
+    if (xhr.status === 200){
+      ctaSent = env;
+      aeHandleResult(xhr, withVoice, true).then(function(){
+        aeSetStatus('Pronto, a montagem foi atualizada. Confira na prévia.', 'ok');
+      });
+      track('cta', { acao: 'aplicar', abre: ctaUsando('abre'), fecha: ctaUsando('fecha') });
+      return;
+    }
+    readXhrError(xhr).then(function(msg){
+      aeSetProgress(null);
+      if (xhr.status === 409 && !forcar){ ctaSent = { abre: null, fecha: null }; ctaAplicar(true); return; }
+      if (xhr.status === 410){ aeInvalidate(msg); aeSetStatus(msg, 'error'); return; }
+      aeSetStatus(msg || 'Não consegui atualizar a montagem. Tenta de novo.', 'error');
+    });
+  };
+  xhr.onerror = function(){ done(); aeSetProgress(null); aeSetStatus('Falha de conexão com o servidor. Tenta de novo.', 'error'); };
+  xhr.ontimeout = function(){ done(); aeSetProgress(null); aeSetStatus('Demorou demais. Tenta de novo.', 'error'); };
+  xhr.send(form);
+}
+function ctaMudou(){
+  ctaRender();
+  if (aeMontagemId) ctaAplicar(false);
+}
+
+Object.keys(CTA_SLOTS).forEach(function(k){
+  var K = CTA_SLOTS[k];
+  el('ctaInput' + K).addEventListener('change', function(){
+    var f = this.files && this.files[0];
+    this.value = '';
+    if (!f) return;
+    ctaMsg('');
+    ctaSet(k, f, false).then(function(ok){
+      if (!ok) return;
+      ctaMsg(k === 'abre' ? 'Vídeo de abertura guardado.' : 'Vídeo de fechamento guardado.', 'ok');
+      track('cta', { acao: 'escolher', slot: k, seg: Math.round(cta[k].dur) });
+      ctaMudou();
+    });
+  });
+  el('ctaUsar' + K).addEventListener('change', function(){
+    if (!cta[k]){ this.checked = false; return; }
+    ctaUsar[k] = this.checked;
+    ctaSaveUsar();
+    track('cta', { acao: this.checked ? 'ligar' : 'desligar', slot: k });
+    ctaMudou();
+  });
+  el('ctaRemove' + K).addEventListener('click', function(){
+    var tinha = ctaUsando(k);
+    cta[k] = null;
+    ctaUsar[k] = false;
+    ctaSaveUsar();
+    idbOp('readwrite', function(st){ return st.delete(k === 'abre' ? 'ctaAbre' : 'ctaFecha'); });
+    ctaMsg(k === 'abre' ? 'Vídeo de abertura removido.' : 'Vídeo de fechamento removido.');
+    track('cta', { acao: 'remover', slot: k });
+    if (tinha) ctaMudou(); else ctaRender();
+  });
+});
+
+// recupera os CTAs guardados no aparelho
+(async function ctaRestore(){
+  try {
+    var a = await idbOp('readonly', function(st){ return st.get('ctaAbre'); });
+    var f = await idbOp('readonly', function(st){ return st.get('ctaFecha'); });
+    if (a && a.blob) await ctaSet('abre', asFile(a), true);
+    if (f && f.blob) await ctaSet('fecha', asFile(f), true);
+  } catch (e) {}
+  ctaMsg('');
+  ctaRender();
+})();
 
 // ---------------- Locução (gravar no navegador ou enviar arquivo) ----------------
 var voiceBlob = null;
@@ -2340,7 +2544,7 @@ function aeListenReset(){
   aeListening = false;
   aeListenFresh = true;
   var b = el('aeListenBtn');
-  if (b) b.textContent = 'Ouvir a prévia com a locução';
+  if (b) b.textContent = aeResultHasVoice ? 'Ouvir a prévia com a locução' : 'Ouvir a prévia com o som';
 }
 el('aeListenBtn').addEventListener('click', function(){
   if (mode !== 'autoedit' || !aeResultFile) return;
@@ -2963,7 +3167,8 @@ el('draftDiscardBtn').addEventListener('click', function(){
   track('rascunho_descartado', {});
   evFlush(true);
   try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
-  idbOp('readwrite', function(st){ return st.clear(); }).then(function(){
+  // os vídeos de abertura/fechamento do corretor continuam guardados
+  idbOp('readwrite', function(st){ st.delete('foto'); st.delete('video'); return st.delete('voz'); }).then(function(){
     location.href = location.pathname;
   });
 });

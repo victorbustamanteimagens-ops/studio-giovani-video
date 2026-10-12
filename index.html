@@ -104,6 +104,20 @@
   .ae-plan-head{display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:16px}
   .ae-plan-head span{font-size:14px; color:var(--text-muted); font-variant-numeric:tabular-nums; text-align:right}
   .ae-plan p{margin:0; font-size:15px; line-height:1.45}
+  .cta-slot{display:flex; flex-direction:column; gap:8px; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface)}
+  .cta-slot.off .cta-body{opacity:0.55}
+  .cta-top{display:flex; align-items:center; gap:10px; min-height:44px}
+  .cta-top input[type="checkbox"]{width:24px; height:24px; accent-color:var(--accent); margin:0; flex-shrink:0; cursor:pointer}
+  .cta-top label{flex:1; font-size:16px; font-weight:700; cursor:pointer}
+  .cta-top label small{display:block; font-size:14px; font-weight:500; color:var(--text-muted)}
+  .cta-body{display:flex; align-items:center; gap:12px}
+  .cta-body img, .cta-body .ph{width:54px; aspect-ratio:9/16; border-radius:7px; object-fit:cover; background:var(--surface-2); border:1px solid var(--border); flex-shrink:0}
+  .cta-info{flex:1; display:flex; flex-direction:column; gap:2px; min-width:0; font-size:15px}
+  .cta-info .nm{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-muted); font-size:14px}
+  .cta-info .acts{display:flex; gap:4px; flex-wrap:wrap}
+  .cta-pick{font:inherit; font-size:16px; font-weight:700; min-height:48px; padding:10px 14px; border-radius:10px; border:1.5px dashed var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; width:100%}
+  .cta-pick:focus-within{outline:2px solid var(--focus); outline-offset:2px}
+  .ae-timeline div.cta{background:var(--surface-2); color:var(--text)}
   .ae-timeline{display:flex; height:28px; border-radius:6px; overflow:hidden; border:1px solid var(--border)}
   .ae-timeline div{display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; background:var(--accent-bg); color:var(--accent-text); border-right:1px solid var(--surface); overflow:hidden; white-space:nowrap; font-variant-numeric:tabular-nums}
   .ae-timeline div:nth-child(even){background:#E3C98C; color:#1C1B18}
@@ -311,6 +325,50 @@
             <button type="button" class="link-btn" id="voiceRemoveBtn">Remover</button>
           </div>
         </div>
+      </div>
+
+      <div class="voice-box" id="ctaBox">
+        <div class="voice-head"><strong>Seu vídeo de abertura e de fechamento</strong><span>opcional</span></div>
+        <p class="voice-hint">Você falando para a câmera, até 40 segundos cada. Entra inteiro, antes e/ou depois da montagem da IA, com o seu som. Fica guardado neste aparelho para as próximas montagens: é só marcar se quer usar.</p>
+        <div class="cta-slot" id="ctaSlotAbre">
+          <div class="cta-top">
+            <input type="checkbox" id="ctaUsarAbre">
+            <label for="ctaUsarAbre">Abertura<small>antes da montagem</small></label>
+          </div>
+          <label class="cta-pick" id="ctaPickAbre" for="ctaInputAbre">Escolher ou gravar vídeo</label>
+          <input type="file" id="ctaInputAbre" accept="video/*" hidden>
+          <div class="cta-body" id="ctaBodyAbre" hidden>
+            <img id="ctaThumbAbre" alt="">
+            <div class="cta-info">
+              <strong id="ctaDurAbre"></strong>
+              <span class="nm" id="ctaNameAbre"></span>
+              <div class="acts">
+                <label class="link-btn" for="ctaInputAbre">Trocar</label>
+                <button type="button" class="link-btn" id="ctaRemoveAbre">Remover</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cta-slot" id="ctaSlotFecha">
+          <div class="cta-top">
+            <input type="checkbox" id="ctaUsarFecha">
+            <label for="ctaUsarFecha">Fechamento<small>depois da montagem</small></label>
+          </div>
+          <label class="cta-pick" id="ctaPickFecha" for="ctaInputFecha">Escolher ou gravar vídeo</label>
+          <input type="file" id="ctaInputFecha" accept="video/*" hidden>
+          <div class="cta-body" id="ctaBodyFecha" hidden>
+            <img id="ctaThumbFecha" alt="">
+            <div class="cta-info">
+              <strong id="ctaDurFecha"></strong>
+              <span class="nm" id="ctaNameFecha"></span>
+              <div class="acts">
+                <label class="link-btn" for="ctaInputFecha">Trocar</label>
+                <button type="button" class="link-btn" id="ctaRemoveFecha">Remover</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="voice-hint" id="ctaMsg" role="status" aria-live="polite"></p>
       </div>
 
       <button type="button" class="enhance-btn" id="aeRunBtn" disabled>Montar vídeo com IA</button>
@@ -530,6 +588,6 @@
   </div>
 </dialog>
 
-<script type="module" src="./app.js?v=16"></script>
+<script type="module" src="./app.js?v=17"></script>
 </body>
 </html>
