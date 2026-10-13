@@ -3009,6 +3009,16 @@ var evDevice = (function(){
 })();
 var evSession = newId();
 var evDev = isTouch ? 'mobile' : 'desktop';
+// Modelo do aparelho, quando o navegador informa (Chrome/Android/Windows).
+// iPhone e Safari não informam o modelo; aí o servidor usa o "user agent".
+var evHw = null;
+try {
+  if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues){
+    navigator.userAgentData.getHighEntropyValues(['model', 'platformVersion']).then(function(h){
+      evHw = { m: String(h.model || '').slice(0, 40), pl: String(h.platform || navigator.userAgentData.platform || '').slice(0, 20), pv: String(h.platformVersion || '').slice(0, 12) };
+    }).catch(function(){});
+  }
+} catch (e) {}
 
 function track(name, props){
   if (window.__SG_NO_EVENTS) return;
@@ -3020,7 +3030,7 @@ function evFlush(leaving){
   clearTimeout(evTimer);
   evTimer = null;
   if (!evQueue.length) return;
-  var body = JSON.stringify({ d: evDevice, s: evSession, dev: evDev, ev: evQueue.splice(0, 40) });
+  var body = JSON.stringify({ d: evDevice, s: evSession, dev: evDev, hw: evHw, ev: evQueue.splice(0, 40) });
   try {
     if (leaving && navigator.sendBeacon){
       navigator.sendBeacon(EVENTS_ENDPOINT, new Blob([body], { type: 'text/plain' }));
