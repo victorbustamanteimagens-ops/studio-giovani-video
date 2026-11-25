@@ -137,7 +137,7 @@ function readState(){
     variant: document.querySelector('#variantSeg button[aria-pressed="true"]').getAttribute('data-variant'),
     localizacao: { on: el('tg_localizacao').checked, value: el('localizacao').value.trim() },
     tipo:        { on: false, value: '' },
-    status:      { on: true, value: anuncioCfg().tag },
+    status:      { on: el('tg_status').checked, value: anuncioCfg().tag },
     valor:       { on: el('tg_valor').checked, value: valorComSufixo(el('valor').value.trim()) },
     area:        { on: el('tg_area').checked, value: areaComM2(el('area').value.trim()) },
     quartos:     { on: el('tg_quartos').checked, value: el('quartos').value.trim() },
@@ -1266,7 +1266,7 @@ document.querySelectorAll('#modeSeg button').forEach(function(btn){
 // ?modo=foto / ?modo=autoedit abre direto na aba (links antigos e favoritos)
 try {
   var modoParam = new URLSearchParams(location.search).get('modo');
-  if (modoParam === 'foto' || modoParam === 'autoedit'){
+  if (modoParam === 'foto' || modoParam === 'autoedit' || modoParam === 'postar'){
     var startTab = document.querySelector('#modeSeg button[data-mode="' + modoParam + '"]');
     if (startTab) setTimeout(function(){ startTab.click(); }, 0);
   }
@@ -1276,6 +1276,10 @@ function applyMode(){
   videoEl.muted = true;
   var isFoto = mode === 'foto';
   var isAE = mode === 'autoedit';
+  var isPostar = mode === 'postar';
+  document.body.classList.toggle('postar-mode', isPostar);
+  el('postarSection').hidden = !isPostar;
+  if (!isPostar){ try { postPararGravacao(); } catch (e) {} }
   el('videoUploadSection').hidden = mode !== 'video';
   el('autoeditSection').hidden = !isAE;
   el('legendaSection').hidden = isFoto;
@@ -1285,7 +1289,7 @@ function applyMode(){
   el('fotoUploadSection').hidden = !isFoto;
   videoEl.style.display = isFoto ? 'none' : 'block';
   photoEl.style.display = isFoto ? 'block' : 'none';
-  pageTitle.textContent = isFoto ? 'Monte seu post' : (isAE ? 'Montagem automática' : 'Monte seu vídeo');
+  pageTitle.textContent = isPostar ? 'Legenda e como postar' : (isFoto ? 'Monte seu post' : (isAE ? 'Montagem automática' : 'Monte seu vídeo'));
   exportBtn.textContent = isFoto ? 'Gerar imagem final' : 'Gerar vídeo final';
   exportHint.textContent = isFoto
     ? 'Fica pronta na hora, aqui mesmo no celular.'
@@ -1609,7 +1613,7 @@ function openCheckSheet(){
     var b = document.createElement('strong'); b.textContent = value;
     li.append(a, b); ul.appendChild(li);
   }
-  row('Etiqueta', anuncioCfg().tag);
+  if (st.status.on) row('Etiqueta', anuncioCfg().tag);
   ['valor', 'localizacao', 'area', 'quartos', 'vagas', 'destaque'].forEach(function(k){
     if (st[k].on && st[k].value){
       var label = k === 'quartos' ? el('quartosLabel').textContent : FIELD_NAMES[k];
@@ -3081,8 +3085,73 @@ el('doneCaptionCopy').addEventListener('click', function(){
 
 
 // ======================= TUTORIAL: como postar no Instagram =======================
-// A pessoa escolhe se quer ver. "Agora não" some com o convite (fica só um
-// link discreto), e o passo a passo continua a um toque de distância.
+// Fica na aba "Postar" (sempre à vista) e também numa janela que a tela
+// "Pronto!" oferece. Na janela a pessoa escolhe se quer ver: "Agora não" some
+// com o convite (fica só um link discreto).
+var TUT_PASSOS = {
+  stories: {
+    nome: 'Stories',
+    passos: [
+      ['Salve o vídeo.', 'Na tela “Pronto!”, toque em “Salvar no celular”. No iPhone, depois toque em “Salvar vídeo”.'],
+      ['Abra o story.', 'No Instagram, deslize a tela para a direita, ou toque no seu perfil com o + no topo.'],
+      ['Escolha o vídeo.', 'Toque no quadradinho da galeria, no canto de baixo, e selecione o vídeo que você salvou.'],
+      ['Confira a tela.', 'Veja se a arte não ficou escondida atrás dos botões do Instagram. Dá pra arrastar o vídeo para ajustar.'],
+      ['Publique.', 'Toque em “Seu story” (ou “Compartilhar”).']
+    ],
+    dica: 'Atalho: no botão “Enviar pelo WhatsApp / Instagram”, escolha o Instagram e depois Stories, sem precisar salvar antes.'
+  },
+  feed: {
+    nome: 'Feed',
+    passos: [
+      ['Copie a legenda.', 'Toque em “Copiar legenda” aqui no app. Ela fica pronta para colar.'],
+      ['Salve o vídeo ou a foto', 'no celular, pelo botão “Salvar no celular”.'],
+      ['Crie a publicação.', 'No Instagram, toque no + e escolha “Reel” para vídeo, ou “Publicação” para foto.'],
+      ['Escolha o arquivo', 'na galeria e toque em “Avançar” até chegar na tela da legenda.'],
+      ['Cole a legenda.', 'Toque no campo “Escreva uma legenda”, segure o dedo e toque em “Colar”. Se quiser, marque a localização.'],
+      ['Publique.', 'Toque em “Compartilhar”.']
+    ],
+    dica: 'Vídeo em pé (vertical) fica melhor como Reel, que aparece no feed e no seu perfil.'
+  }
+};
+function tutMonta(box){
+  box.innerHTML = '';
+  var tabs = document.createElement('div');
+  tabs.className = 'tabs';
+  tabs.setAttribute('role', 'group');
+  tabs.setAttribute('aria-label', 'Onde postar');
+  var panels = {};
+  Object.keys(TUT_PASSOS).forEach(function(k, i){
+    var d = TUT_PASSOS[k];
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'tab'; b.textContent = d.nome;
+    b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+    tabs.appendChild(b);
+    var p = document.createElement('div');
+    p.hidden = i !== 0;
+    var ol = document.createElement('ol');
+    ol.className = 'tut-steps';
+    d.passos.forEach(function(st){
+      var li = document.createElement('li');
+      var bb = document.createElement('b'); bb.textContent = st[0];
+      li.appendChild(bb); li.appendChild(document.createTextNode(' ' + st[1]));
+      ol.appendChild(li);
+    });
+    p.appendChild(ol);
+    var tip = document.createElement('p');
+    tip.className = 'tut-tip'; tip.textContent = d.dica;
+    p.appendChild(tip);
+    panels[k] = p;
+    b.addEventListener('click', function(){
+      Object.keys(panels).forEach(function(kk){ panels[kk].hidden = kk !== k; });
+      Array.prototype.forEach.call(tabs.children, function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+      track('tutorial', { acao: 'aba', aba: k });
+    });
+  });
+  box.appendChild(tabs);
+  Object.keys(panels).forEach(function(k){ box.appendChild(panels[k]); });
+}
+tutMonta(el('postarTut'));
+
 var TUT_KEY = 'sg-tutorial';
 function tutRecusado(){ try { return localStorage.getItem(TUT_KEY) === 'nao'; } catch (e) { return false; } }
 function tutRefresh(){
@@ -3090,15 +3159,8 @@ function tutRefresh(){
   el('tutAsk').hidden = recusou;
   el('tutLink').hidden = !recusou;
 }
-function tutAba(qual){
-  ['stories', 'feed'].forEach(function(k){
-    var on = k === qual;
-    el('tutPanel_' + k).hidden = !on;
-    document.querySelector('[data-tut="' + k + '"]').setAttribute('aria-pressed', on ? 'true' : 'false');
-  });
-}
 function tutAbrir(origem){
-  tutAba('stories');
+  tutMonta(el('tutDialogBody'));
   var sh = el('tutSheet');
   if (sh.showModal) sh.showModal();
   track('tutorial', { acao: 'ver', de: origem });
@@ -3111,8 +3173,164 @@ el('tutNo').addEventListener('click', function(){
   track('tutorial', { acao: 'recusar' });
 });
 el('tutClose').addEventListener('click', function(){ el('tutSheet').close(); });
-Array.prototype.forEach.call(document.querySelectorAll('[data-tut]'), function(b){
-  b.addEventListener('click', function(){ tutAba(b.getAttribute('data-tut')); track('tutorial', { acao: 'aba', aba: b.getAttribute('data-tut') }); });
+
+
+// ======================= ABA POSTAR: legenda por texto ou áudio =======================
+// A pessoa escreve ou fala o que o imóvel tem. Se for áudio, a IA transcreve
+// (o texto aparece na caixa, pra ela corrigir) e depois escreve a legenda no padrão.
+var postTipo = 'venda';
+var postVariant = 0;
+var postRun = 0;
+var postBusy = false;
+var postAudio = null;          // { blob, name, secs }
+var postUrl = null;
+var postRecorder = null, postStream = null, postTimerId = null, postStartedAt = 0;
+
+function postStatus(t, estado){ var e = el('postStatus'); e.textContent = t || ''; e.dataset.state = estado || ''; }
+function postAudioShow(estado){
+  el('postIdle').hidden = estado !== 'idle';
+  el('postRecording').hidden = estado !== 'recording';
+  el('postReady').hidden = estado !== 'ready';
+}
+function postBtns(busy){
+  el('postGerarBtn').disabled = !!busy;
+  el('postNovaBtn').disabled = !!busy;
+  el('postCopyBtn').disabled = !!busy;
+}
+function postAudioLimpar(){
+  postAudio = null;
+  if (postUrl){ URL.revokeObjectURL(postUrl); postUrl = null; }
+  el('postPlayer').removeAttribute('src');
+  postAudioShow('idle');
+}
+function postAudioPronto(blob, name, secs){
+  postAudioLimpar();
+  postAudio = { blob: blob, name: name, secs: secs || 0 };
+  postUrl = URL.createObjectURL(blob);
+  el('postPlayer').src = postUrl;
+  el('postInfo').textContent = secs ? 'Áudio de ' + voiceFmt(secs) : (name || 'Áudio');
+  postAudioShow('ready');
+}
+function postPararGravacao(){
+  if (postRecorder && postRecorder.state === 'recording') postRecorder.stop();
+}
+async function postGravar(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder){
+    postStatus('Esse navegador não grava áudio. Use o Chrome ou o Safari atualizados, ou escreva o texto.', 'error');
+    return;
+  }
+  try {
+    postStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  } catch (err) {
+    var negado = err && (err.name === 'NotAllowedError' || err.name === 'SecurityError');
+    postStatus(negado
+      ? 'O navegador bloqueou o microfone. Libere o microfone pra este site (no cadeado ao lado do endereço) e tente de novo.'
+      : 'Não encontrei um microfone. Escreva o texto ou envie um áudio pronto.', 'error');
+    return;
+  }
+  var mime = voicePickMime(), chunks = [];
+  try { postRecorder = mime ? new MediaRecorder(postStream, { mimeType: mime }) : new MediaRecorder(postStream); }
+  catch (e) { postRecorder = new MediaRecorder(postStream); }
+  postRecorder.ondataavailable = function(e){ if (e.data && e.data.size) chunks.push(e.data); };
+  postRecorder.onstop = function(){
+    clearInterval(postTimerId);
+    if (postStream){ postStream.getTracks().forEach(function(t){ t.stop(); }); postStream = null; }
+    var type = (postRecorder && postRecorder.mimeType) || mime || 'audio/webm';
+    var ext = /mp4/.test(type) ? 'm4a' : (/ogg/.test(type) ? 'ogg' : 'webm');
+    var blob = new Blob(chunks, { type: type });
+    postRecorder = null;
+    if (blob.size < 2000){ postAudioShow('idle'); postStatus('A gravação ficou vazia. Tente de novo.', 'error'); return; }
+    var secs = (Date.now() - postStartedAt) / 1000;
+    postAudioPronto(blob, 'audio-post.' + ext, secs);
+    postStatus('Áudio gravado. Ouça se quiser e toque em “Gerar legenda”.');
+  };
+  postRecorder.start(250);
+  postStartedAt = Date.now();
+  el('postTimer').textContent = '0:00';
+  postAudioShow('recording');
+  postStatus('Gravando. Fale com calma sobre o imóvel e toque em “Parar” quando terminar.');
+  postTimerId = setInterval(function(){
+    var sec = (Date.now() - postStartedAt) / 1000;
+    el('postTimer').textContent = voiceFmt(sec);
+    if (sec >= 180) postPararGravacao();
+  }, 250);
+}
+function postTranscrever(a){
+  var form = new FormData();
+  form.append('video', a.blob, a.name || 'audio.webm');
+  return fetch(LEGENDA_ENDPOINT, { method: 'POST', body: form }).then(capJson).then(function(d){
+    return (d.legendas || []).map(function(l){ return l.texto; }).join(' ').replace(/\s+/g, ' ').trim();
+  });
+}
+function postGerar(nova){
+  if (postBusy) return;
+  var typed = el('postFala').value.trim();
+  if (!postAudio && typed.length < 15){
+    postStatus('Escreva ou grave um pouco mais sobre o imóvel (bairro, quartos, valor…).', 'error');
+    return;
+  }
+  postVariant = nova ? postVariant + 1 : 0;
+  postBusy = true;
+  var run = ++postRun, t0 = Date.now(), comAudio = !!postAudio;
+  postBtns(true);
+  postStatus(comAudio ? 'A IA está ouvindo o áudio… (uns 10 a 40 segundos)' : 'Escrevendo a legenda…', 'work');
+  var passo = comAudio ? postTranscrever(postAudio) : Promise.resolve(null);
+  passo.then(function(falado){
+    if (run !== postRun) return null;
+    if (falado !== null){
+      typed = ((typed ? typed + ' ' : '') + falado).trim();
+      el('postFala').value = typed;
+      postAudioLimpar();
+      if (typed.length < 15) throw capErro('Não encontrei fala nesse áudio.', true);
+      postStatus('Escrevendo a legenda…', 'work');
+    }
+    return fetch(POST_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fala: typed, anuncio: postTipo, variante: postVariant })
+    }).then(capJson);
+  }).then(function(d){
+    if (run !== postRun || !d) return;
+    el('postLegenda').value = d.legenda;
+    el('postResult').hidden = false;
+    postStatus(comAudio ? 'Pronto. O texto do seu áudio está na caixa de cima, se quiser corrigir e gerar de novo.' : 'Legenda pronta. Confira e copie.', 'ok');
+    track('legenda_post', { acao: 'aba_postar', ok: true, audio: comAudio, seg: Math.round((Date.now() - t0) / 100) / 10 });
+    try { el('postResult').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
+  }).catch(function(err){
+    if (run !== postRun) return;
+    var msg = (err && err.message) || 'Não consegui gerar a legenda.';
+    if (err && err.name === 'TypeError') msg = 'Falha de conexão com o servidor. Confere a internet e tenta de novo.';
+    postStatus(msg, 'error');
+    track('legenda_post', { acao: 'aba_postar', ok: false, audio: comAudio, semfala: !!(err && err.semFala) });
+  }).then(function(){
+    if (run === postRun){ postBusy = false; postBtns(false); }
+  });
+}
+document.querySelectorAll('#postTipoSeg button').forEach(function(b){
+  b.addEventListener('click', function(){
+    postTipo = b.getAttribute('data-tipo');
+    document.querySelectorAll('#postTipoSeg button').forEach(function(x){ x.setAttribute('aria-pressed', String(x === b)); });
+  });
+});
+el('postRecBtn').addEventListener('click', postGravar);
+el('postStopBtn').addEventListener('click', postPararGravacao);
+el('postRedoBtn').addEventListener('click', function(){ postAudioLimpar(); postGravar(); });
+el('postRemoveBtn').addEventListener('click', function(){ postAudioLimpar(); postStatus(''); });
+el('postAudioFile').addEventListener('change', function(){
+  var f = this.files && this.files[0];
+  this.value = '';
+  if (!f) return;
+  if (f.size > 30 * 1024 * 1024){ postStatus('Esse áudio passou de 30 MB. Envie um arquivo menor.', 'error'); return; }
+  postAudioPronto(f, f.name || 'audio', 0);
+  postStatus('Áudio carregado. Toque em “Gerar legenda”.');
+});
+el('postGerarBtn').addEventListener('click', function(){ postGerar(false); });
+el('postNovaBtn').addEventListener('click', function(){ postGerar(true); track('legenda_post', { acao: 'aba_outra' }); });
+el('postCopyBtn').addEventListener('click', function(){
+  var ta = el('postLegenda'), btn = this;
+  function ok(){ btn.textContent = 'Copiada!'; setTimeout(function(){ btn.textContent = 'Copiar legenda'; }, 2000); track('legenda_post', { acao: 'aba_copiar' }); }
+  try { navigator.clipboard.writeText(ta.value).then(ok, function(){ ta.select(); document.execCommand('copy'); ok(); }); }
+  catch (e) { ta.select(); try { document.execCommand('copy'); ok(); } catch (e2) {} }
 });
 
 

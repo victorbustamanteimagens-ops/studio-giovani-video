@@ -268,6 +268,14 @@
   .tut-steps b{font-weight:700}
   .sheet p.tut-tip{margin-top:12px; padding:10px 12px; border-radius:10px; background:var(--surface-2); border:1px solid var(--border); font-size:14.5px; color:var(--text)}
   .cap-hint{font-size:14px !important}
+  .tut-tip{margin:12px 0 0; padding:10px 12px; border-radius:10px; background:var(--surface-2); border:1px solid var(--border); font-size:14.5px; line-height:1.45; color:var(--text)}
+  .postar{display:flex; flex-direction:column; gap:24px}
+  .postar fieldset{display:flex; flex-direction:column; gap:12px}
+  .post-intro{margin:0; font-size:15px; line-height:1.45; color:var(--text-muted)}
+  #postFala{font:inherit; font-size:16px; line-height:1.45; padding:10px 12px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--text); width:100%; resize:vertical}
+  #postFala:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
+  body.postar-mode .panel > fieldset:not(#modeFieldset), body.postar-mode .panel > .download-panel, body.postar-mode .panel > .draft-bar, body.postar-mode .preview-wrap{display:none !important}
+  @media (min-width:861px){ body.postar-mode .app{justify-content:center} body.postar-mode .panel{width:min(560px, 100%)} }
   .result-media video{aspect-ratio:9/16; height:40vh; width:auto; background:#0B2A4A}
 </style>
 </head>
@@ -284,14 +292,65 @@
       <button type="button" class="link-btn" id="draftDiscardBtn">Começar do zero</button>
     </div>
 
-    <fieldset>
+    <fieldset id="modeFieldset">
       <legend>O que você vai criar</legend>
       <div class="tabs" id="modeSeg" role="group" aria-label="Tipo de conteúdo">
         <button type="button" class="tab" data-mode="video" aria-pressed="true">Vídeo</button>
         <button type="button" class="tab" data-mode="foto" aria-pressed="false">Foto</button>
         <button type="button" class="tab" data-mode="autoedit" aria-pressed="false">Montagem automática</button>
+        <button type="button" class="tab" data-mode="postar" aria-pressed="false">Postar</button>
       </div>
     </fieldset>
+
+    <div class="postar" id="postarSection" hidden>
+      <fieldset>
+        <legend>Legenda para o post</legend>
+        <p class="post-intro">Fale ou escreva o que o imóvel tem. A IA monta a legenda no padrão do Giovani, só com o que você disser.</p>
+        <div class="chips" id="postTipoSeg" role="group" aria-label="Tipo de anúncio">
+          <button type="button" class="chip" data-tipo="venda" aria-pressed="true">Venda</button>
+          <button type="button" class="chip" data-tipo="aluguel" aria-pressed="false">Aluguel</button>
+          <button type="button" class="chip" data-tipo="comercial" aria-pressed="false">Comercial</button>
+          <button type="button" class="chip" data-tipo="vendido" aria-pressed="false">Vendido</button>
+        </div>
+        <label class="toggle-label" for="postFala">O que você quer dizer no post</label>
+        <textarea id="postFala" rows="5" placeholder="Ex.: Apartamento de 80 metros em Santa Rosa, 2 quartos sendo uma suíte, 1 vaga, 780 mil, perto da praia." spellcheck="true"></textarea>
+        <div class="voice-box">
+          <div class="voice-head"><strong>Ou fale em áudio</strong><span>opcional</span></div>
+          <div class="voice-idle" id="postIdle">
+            <button type="button" class="rec-btn" id="postRecBtn"><span class="rec-dot" aria-hidden="true"></span>Gravar áudio</button>
+            <label class="link-btn" for="postAudioFile">ou enviar um áudio pronto</label>
+            <input type="file" id="postAudioFile" accept="audio/*,.m4a,.ogg,.opus,.mp3,.wav" hidden>
+          </div>
+          <div class="voice-recording" id="postRecording" hidden>
+            <span class="rec-live"><span class="rec-dot" aria-hidden="true"></span>Gravando <span id="postTimer">0:00</span></span>
+            <button type="button" class="rec-stop" id="postStopBtn">Parar</button>
+          </div>
+          <div class="voice-ready" id="postReady" hidden>
+            <audio id="postPlayer" controls preload="metadata"></audio>
+            <div class="voice-actions">
+              <span id="postInfo"></span>
+              <button type="button" class="mini-btn" id="postRedoBtn">Gravar de novo</button>
+              <button type="button" class="mini-btn" id="postRemoveBtn">Remover</button>
+            </div>
+          </div>
+        </div>
+        <div class="status" id="postStatus" role="status" aria-live="polite"></div>
+        <button type="button" class="primary-btn" id="postGerarBtn">Gerar legenda</button>
+        <div class="cap-box" id="postResult" hidden>
+          <label class="sub-legend" for="postLegenda" style="margin-top:0">Sua legenda</label>
+          <textarea id="postLegenda" rows="10" spellcheck="true"></textarea>
+          <div class="cap-actions">
+            <button type="button" class="primary-btn" id="postCopyBtn">Copiar legenda</button>
+            <button type="button" class="secondary-btn" id="postNovaBtn">Outra versão</button>
+          </div>
+          <p class="cap-hint">Copie e cole no Instagram na hora de postar. Dá pra editar o texto antes.</p>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Como postar no Instagram</legend>
+        <div id="postarTut"></div>
+      </fieldset>
+    </div>
 
     <fieldset id="videoUploadSection">
       <legend>Vídeo do imóvel</legend>
@@ -458,6 +517,13 @@
         <button type="button" class="chip" data-anuncio="vendido" aria-pressed="false">VENDIDO</button>
         <button type="button" class="chip" data-anuncio="comercial" aria-pressed="false">COMERCIAL</button>
       </div>
+      <div class="toggle-row" data-toggle-row="status">
+        <label class="check" for="tg_status"><input type="checkbox" id="tg_status" checked aria-label="Mostrar etiqueta na arte"></label>
+        <div class="toggle-field">
+          <label class="toggle-label" for="tg_status">Mostrar a etiqueta na arte</label>
+          <input type="hidden" id="status" value="À VENDA">
+        </div>
+      </div>
     </fieldset>
 
     <fieldset>
@@ -474,13 +540,6 @@
         <div class="toggle-field">
           <label class="toggle-label" for="tipo">Tipo do imóvel</label>
           <input type="text" id="tipo" placeholder="Ex.: Apartamento" autocomplete="off">
-        </div>
-      </div>
-      <div class="toggle-row" data-toggle-row="status" hidden>
-        <label class="check" for="tg_status"><input type="checkbox" id="tg_status" checked aria-label="Mostrar etiqueta na arte"></label>
-        <div class="toggle-field">
-          <label class="toggle-label" for="status">Etiqueta</label>
-          <input type="text" id="status" value="À VENDA" placeholder="Ex.: À VENDA" autocomplete="off">
         </div>
       </div>
       <div class="toggle-row" data-toggle-row="valor">
@@ -613,37 +672,13 @@
 <dialog class="sheet" id="tutSheet" aria-labelledby="tutTitle">
   <div class="sheet-inner">
     <h2 id="tutTitle">Como postar no Instagram</h2>
-    <div class="tabs" role="group" aria-label="Onde postar">
-      <button type="button" class="tab" data-tut="stories" aria-pressed="true">Stories</button>
-      <button type="button" class="tab" data-tut="feed" aria-pressed="false">Feed</button>
-    </div>
-    <div id="tutPanel_stories">
-      <ol class="tut-steps">
-        <li><b>Salve o vídeo.</b> Na tela anterior, toque em “Salvar no celular”. No iPhone, depois toque em “Salvar vídeo”.</li>
-        <li><b>Abra o story.</b> No Instagram, deslize a tela para a direita, ou toque no seu perfil com o + no topo.</li>
-        <li><b>Escolha o vídeo.</b> Toque no quadradinho da galeria, no canto de baixo, e selecione o vídeo que você salvou.</li>
-        <li><b>Confira a tela.</b> Veja se a arte não ficou escondida atrás dos botões do Instagram. Dá pra arrastar o vídeo para ajustar.</li>
-        <li><b>Publique.</b> Toque em “Seu story” (ou “Compartilhar”).</li>
-      </ol>
-      <p class="tut-tip">Atalho: no botão “Enviar pelo WhatsApp / Instagram”, escolha o Instagram e depois Stories, sem precisar salvar antes.</p>
-    </div>
-    <div id="tutPanel_feed" hidden>
-      <ol class="tut-steps">
-        <li><b>Copie a legenda.</b> Toque em “Copiar legenda” aqui no app. Ela fica pronta para colar.</li>
-        <li><b>Salve o vídeo ou a foto</b> no celular, pelo botão “Salvar no celular”.</li>
-        <li><b>Crie a publicação.</b> No Instagram, toque no + e escolha “Reel” para vídeo, ou “Publicação” para foto.</li>
-        <li><b>Escolha o arquivo</b> na galeria e toque em “Avançar” até chegar na tela da legenda.</li>
-        <li><b>Cole a legenda.</b> Toque no campo “Escreva uma legenda”, segure o dedo e toque em “Colar”. Se quiser, marque a localização.</li>
-        <li><b>Publique.</b> Toque em “Compartilhar”.</li>
-      </ol>
-      <p class="tut-tip">Vídeo em pé (vertical) fica melhor como Reel, que aparece no feed e no seu perfil.</p>
-    </div>
+    <div id="tutDialogBody"></div>
     <div class="sheet-actions">
       <button type="button" class="primary-btn" id="tutClose">Entendi</button>
     </div>
   </div>
 </dialog>
 
-<script type="module" src="./app.js?v=19"></script>
+<script type="module" src="./app.js?v=20"></script>
 </body>
 </html>
