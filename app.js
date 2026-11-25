@@ -1656,7 +1656,8 @@ var isTouch = false;
 try { isTouch = window.matchMedia('(pointer: coarse)').matches; } catch (e) {}
 
 function showDone(kind, blob, filename){
-  capVariant = 0; try { capFill(); } catch (e) {}
+  capVariant = 0; capKind = kind; try { capFill(); } catch (e) {}
+  try { tutRefresh(); } catch (e) {}
   if (doneData && doneData.url) URL.revokeObjectURL(doneData.url);
   var type = blob.type || (kind === 'foto' ? 'image/jpeg' : 'video/mp4');
   var file = null;
@@ -2952,10 +2953,10 @@ function buildPostCaption(variant){
   linhas.push(hook);
 
   var tipoTxt = anuncio === 'comercial' ? 'Um espaço comercial' : 'Um imóvel';
-  var regiao = cidade || bairro;
+  var regiaoDe = (cidade || loc.bairro) ? ' de ' + (cidade || loc.bairro) : '';
   var descs = [
-    tipoTxt + (area ? ' de ' + area : '') + ', confortável e em uma localização privilegiada de ' + regiao + '.',
-    tipoTxt + (area ? ' com ' + area + ' muito bem distribuídos' : ' muito bem distribuído') + ', em uma das regiões mais desejadas de ' + regiao + '.',
+    tipoTxt + (area ? ' de ' + area : '') + ', confortável e em uma localização privilegiada' + regiaoDe + '.',
+    tipoTxt + (area ? ' com ' + area + ' muito bem distribuídos' : ' muito bem distribuído') + ', em uma das regiões mais desejadas' + (regiaoDe || ' da cidade') + '.',
     tipoTxt + (area ? ' de ' + area : '') + ', bem cuidado e com tudo o que você precisa por perto em ' + bairro + '.',
     tipoTxt + (area ? ' de ' + area : '') + ' em ' + onde + ', com ótima localização e excelente custo-benefício.'
   ];
@@ -2980,9 +2981,94 @@ function buildPostCaption(variant){
   linhas.push([loc.bairro ? '#' + capTag(loc.bairro) : '', cidade ? '#' + capTag(cidade) : '', tagAnuncio, cidade ? '#Imóveis' + capTag(cidade) : '#imóveis', '#remaxaxxia', '#remax'].filter(Boolean).join(' '));
   return linhas.join('\n\n');
 }
+var CAP_HINT_PADRAO = 'Copie e cole no Instagram na hora de postar. Dá pra editar o texto aqui antes.';
+var POST_ENDPOINT = SERVER + '/legenda-post';
+var capKind = 'video';
+var capRun = 0;
+var capFala = { chave: '', texto: '' };
+
+// Sem nenhum dado do imóvel (o vídeo foi feito por fora): a legenda do post
+// nasce do que a pessoa FALA no vídeo. A IA ouve, transcreve e escreve no padrão.
+function capSemInfo(){
+  var st = readState();
+  return !['localizacao', 'valor', 'area', 'quartos', 'vagas', 'destaque'].some(function(k){ return st[k].on && st[k].value; });
+}
+function capModoFala(){ return capKind === 'video' && capSemInfo(); }
+function capHint(t, estado){
+  var h = el('doneCaptionHint'); if (!h) return;
+  h.textContent = t || CAP_HINT_PADRAO;
+  h.dataset.state = estado || '';
+}
+function capBusy(on){
+  el('doneCaptionCopy').disabled = !!on;
+  el('doneCaptionNew').disabled = !!on;
+}
+function capErro(msg, semFala){ var e = new Error(msg); e.semFala = !!semFala; return e; }
+function capJson(r){
+  return r.json().catch(function(){ return null; }).then(function(d){
+    if (!r.ok || !d) throw capErro((d && d.error) || ('O servidor respondeu ' + r.status + '.'));
+    return d;
+  });
+}
+function capFalaTexto(){
+  var isAE = mode === 'autoedit', which = isAE ? 'autoedit' : 'video';
+  var items = (legStore[which] && legStore[which].items) || [];
+  if (items.length) return Promise.resolve(items.map(function(i){ return i.texto; }).join(' '));
+  var chave = isAE ? 'ae:' + aeMontagemId : 'v:' + (videoTabFile ? videoTabFile.name + ':' + videoTabFile.size + ':' + videoTabFile.lastModified : '');
+  if (capFala.chave === chave && capFala.texto) return Promise.resolve(capFala.texto);
+  var form = new FormData();
+  if (isAE){
+    if (!aeMontagemId) return Promise.reject(capErro('Monte o vídeo com IA primeiro.'));
+    form.append('montagemId', aeMontagemId);
+  } else {
+    if (!videoTabFile) return Promise.reject(capErro('Não achei o vídeo para a IA ouvir.'));
+    form.append('video', videoTabFile, videoTabFile.name || 'video.mp4');
+  }
+  return fetch(LEGENDA_ENDPOINT, { method: 'POST', body: form }).then(capJson).then(function(d){
+    var texto = (d.legendas || []).map(function(l){ return l.texto; }).join(' ').replace(/\s+/g, ' ').trim();
+    capFala = { chave: chave, texto: texto };
+    return texto;
+  });
+}
+function capDaFala(){
+  var ta = el('doneCaption'), run = ++capRun, variante = capVariant, t0 = Date.now();
+  ta.value = '';
+  capBusy(true);
+  capHint('A IA está ouvindo o vídeo e escrevendo a legenda… (uns 10 a 40 segundos)', 'work');
+  capFalaTexto().then(function(fala){
+    if (run !== capRun) return null;
+    if (fala.length < 15) throw capErro('Não encontrei fala nesse vídeo.', true);
+    return fetch(POST_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fala: fala, anuncio: anuncio, variante: variante })
+    }).then(capJson);
+  }).then(function(d){
+    if (run !== capRun || !d) return;
+    ta.value = d.legenda;
+    capBusy(false);
+    capHint('Legenda escrita a partir do que você fala no vídeo. Confira os detalhes antes de postar e edite se quiser.', 'ok');
+    track('legenda_post', { acao: 'fala', ok: true, seg: Math.round((Date.now() - t0) / 100) / 10 });
+  }).catch(function(err){
+    if (run !== capRun) return;
+    var msg = (err && err.message) || '';
+    if (err && err.name === 'TypeError') msg = 'Falha de conexão com o servidor.';
+    ta.value = buildPostCaption(capVariant);
+    capBusy(false);
+    capHint(msg + (err && err.semFala
+      ? ' Deixei um texto-modelo: preencha os dados do imóvel e gere de novo, ou escreva à mão.'
+      : ' Deixei um texto-modelo para você editar. Toque em “Outra versão” para tentar de novo.'), 'error');
+    track('legenda_post', { acao: 'fala', ok: false, semfala: !!(err && err.semFala) });
+  });
+}
 function capFill(){
   var ta = el('doneCaption');
-  if (ta) ta.value = buildPostCaption(capVariant);
+  if (!ta) return;
+  if (capModoFala()){ capDaFala(); return; }
+  capRun++;
+  capBusy(false);
+  capHint('');
+  ta.value = buildPostCaption(capVariant);
 }
 el('doneCaptionNew').addEventListener('click', function(){ capVariant++; capFill(); track('legenda_post', { acao: 'outra' }); });
 el('doneCaptionCopy').addEventListener('click', function(){
@@ -2991,6 +3077,42 @@ el('doneCaptionCopy').addEventListener('click', function(){
   try {
     navigator.clipboard.writeText(ta.value).then(ok, function(){ ta.select(); document.execCommand('copy'); ok(); });
   } catch (e) { ta.select(); try { document.execCommand('copy'); ok(); } catch (e2) {} }
+});
+
+
+// ======================= TUTORIAL: como postar no Instagram =======================
+// A pessoa escolhe se quer ver. "Agora não" some com o convite (fica só um
+// link discreto), e o passo a passo continua a um toque de distância.
+var TUT_KEY = 'sg-tutorial';
+function tutRecusado(){ try { return localStorage.getItem(TUT_KEY) === 'nao'; } catch (e) { return false; } }
+function tutRefresh(){
+  var recusou = tutRecusado();
+  el('tutAsk').hidden = recusou;
+  el('tutLink').hidden = !recusou;
+}
+function tutAba(qual){
+  ['stories', 'feed'].forEach(function(k){
+    var on = k === qual;
+    el('tutPanel_' + k).hidden = !on;
+    document.querySelector('[data-tut="' + k + '"]').setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+function tutAbrir(origem){
+  tutAba('stories');
+  var sh = el('tutSheet');
+  if (sh.showModal) sh.showModal();
+  track('tutorial', { acao: 'ver', de: origem });
+}
+el('tutYes').addEventListener('click', function(){ tutAbrir('convite'); });
+el('tutLink').addEventListener('click', function(){ tutAbrir('link'); });
+el('tutNo').addEventListener('click', function(){
+  try { localStorage.setItem(TUT_KEY, 'nao'); } catch (e) {}
+  tutRefresh();
+  track('tutorial', { acao: 'recusar' });
+});
+el('tutClose').addEventListener('click', function(){ el('tutSheet').close(); });
+Array.prototype.forEach.call(document.querySelectorAll('[data-tut]'), function(b){
+  b.addEventListener('click', function(){ tutAba(b.getAttribute('data-tut')); track('tutorial', { acao: 'aba', aba: b.getAttribute('data-tut') }); });
 });
 
 

@@ -256,6 +256,17 @@
   .cap-box textarea:focus-visible{outline:2px solid var(--focus); outline-offset:1px}
   .cap-actions{display:flex; gap:8px}
   .cap-actions button{flex:1; min-height:48px; font-size:15px; padding:10px}
+  .cap-hint[data-state="work"]{color:var(--accent)}
+  .cap-hint[data-state="error"]{color:var(--danger)}
+  .cap-actions button:disabled{opacity:0.55; cursor:default}
+  .tut-box{display:flex; flex-direction:column; align-items:center; gap:10px}
+  .tut-ask{display:flex; flex-direction:column; gap:8px; width:100%; padding:14px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border)}
+  .tut-ask strong{font-size:16px}
+  .tut-ask span{font-size:14.5px; color:var(--text-muted); line-height:1.4}
+  .tut-steps{margin:0; padding:0 0 0 22px; display:flex; flex-direction:column; gap:12px; font-size:15.5px; line-height:1.45; color:var(--text)}
+  .tut-steps li::marker{color:var(--accent); font-weight:700}
+  .tut-steps b{font-weight:700}
+  .sheet p.tut-tip{margin-top:12px; padding:10px 12px; border-radius:10px; background:var(--surface-2); border:1px solid var(--border); font-size:14.5px; color:var(--text)}
   .cap-hint{font-size:14px !important}
   .result-media video{aspect-ratio:9/16; height:40vh; width:auto; background:#0B2A4A}
 </style>
@@ -577,7 +588,7 @@
         <button type="button" class="primary-btn" id="doneCaptionCopy">Copiar legenda</button>
         <button type="button" class="secondary-btn" id="doneCaptionNew">Outra versão</button>
       </div>
-      <p class="cap-hint">Copie e cole no Instagram na hora de postar. Dá pra editar o texto aqui antes.</p>
+      <p class="cap-hint" id="doneCaptionHint" role="status" aria-live="polite">Copie e cole no Instagram na hora de postar. Dá pra editar o texto aqui antes.</p>
     </div>
     <div class="sheet-actions">
       <button type="button" class="primary-btn" id="doneShareBtn">Enviar pelo WhatsApp / Instagram</button>
@@ -585,9 +596,54 @@
       <button type="button" class="link-btn" id="doneCloseBtn">Fechar e fazer outro</button>
     </div>
     <div class="status" id="doneStatus" role="status" aria-live="polite"></div>
+    <div class="tut-box">
+      <div class="tut-ask" id="tutAsk">
+        <strong>Quer ver como postar no Instagram?</strong>
+        <span>Um passo a passo rápido, para Stories e para o Feed.</span>
+        <div class="cap-actions">
+          <button type="button" class="primary-btn" id="tutYes">Ver o passo a passo</button>
+          <button type="button" class="secondary-btn" id="tutNo">Agora não</button>
+        </div>
+      </div>
+      <button type="button" class="link-btn" id="tutLink" hidden>Ver como postar no Instagram</button>
+    </div>
   </div>
 </dialog>
 
-<script type="module" src="./app.js?v=18"></script>
+<dialog class="sheet" id="tutSheet" aria-labelledby="tutTitle">
+  <div class="sheet-inner">
+    <h2 id="tutTitle">Como postar no Instagram</h2>
+    <div class="tabs" role="group" aria-label="Onde postar">
+      <button type="button" class="tab" data-tut="stories" aria-pressed="true">Stories</button>
+      <button type="button" class="tab" data-tut="feed" aria-pressed="false">Feed</button>
+    </div>
+    <div id="tutPanel_stories">
+      <ol class="tut-steps">
+        <li><b>Salve o vídeo.</b> Na tela anterior, toque em “Salvar no celular”. No iPhone, depois toque em “Salvar vídeo”.</li>
+        <li><b>Abra o story.</b> No Instagram, deslize a tela para a direita, ou toque no seu perfil com o + no topo.</li>
+        <li><b>Escolha o vídeo.</b> Toque no quadradinho da galeria, no canto de baixo, e selecione o vídeo que você salvou.</li>
+        <li><b>Confira a tela.</b> Veja se a arte não ficou escondida atrás dos botões do Instagram. Dá pra arrastar o vídeo para ajustar.</li>
+        <li><b>Publique.</b> Toque em “Seu story” (ou “Compartilhar”).</li>
+      </ol>
+      <p class="tut-tip">Atalho: no botão “Enviar pelo WhatsApp / Instagram”, escolha o Instagram e depois Stories, sem precisar salvar antes.</p>
+    </div>
+    <div id="tutPanel_feed" hidden>
+      <ol class="tut-steps">
+        <li><b>Copie a legenda.</b> Toque em “Copiar legenda” aqui no app. Ela fica pronta para colar.</li>
+        <li><b>Salve o vídeo ou a foto</b> no celular, pelo botão “Salvar no celular”.</li>
+        <li><b>Crie a publicação.</b> No Instagram, toque no + e escolha “Reel” para vídeo, ou “Publicação” para foto.</li>
+        <li><b>Escolha o arquivo</b> na galeria e toque em “Avançar” até chegar na tela da legenda.</li>
+        <li><b>Cole a legenda.</b> Toque no campo “Escreva uma legenda”, segure o dedo e toque em “Colar”. Se quiser, marque a localização.</li>
+        <li><b>Publique.</b> Toque em “Compartilhar”.</li>
+      </ol>
+      <p class="tut-tip">Vídeo em pé (vertical) fica melhor como Reel, que aparece no feed e no seu perfil.</p>
+    </div>
+    <div class="sheet-actions">
+      <button type="button" class="primary-btn" id="tutClose">Entendi</button>
+    </div>
+  </div>
+</dialog>
+
+<script type="module" src="./app.js?v=19"></script>
 </body>
 </html>
